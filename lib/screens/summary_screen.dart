@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:free_ride/models/ride_summary.dart';
 import 'package:free_ride/services/route_storage_service.dart';
+import 'package:free_ride/screens/simulation_screen.dart';
+import 'package:free_ride/providers/route_provider.dart';
 
 class SummaryScreen extends StatefulWidget {
   final RideSummary summary;
@@ -41,6 +44,29 @@ class _SummaryScreenState extends State<SummaryScreen> {
 
   void _discardRide() {
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _repeatRide() async {
+    // Reload the route from storage and navigate to simulation screen
+    final routeProvider = context.read<RouteProvider>();
+    final route = _storageService.getRouteById(widget.summary.routeId);
+    
+    if (route != null) {
+      routeProvider.setCurrentRoute(route);
+      if (mounted) {
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (context) => SimulationScreen(),
+          ),
+        );
+      }
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Route no longer available')),
+        );
+      }
+    }
   }
 
   @override
@@ -231,7 +257,18 @@ class _SummaryScreenState extends State<SummaryScreen> {
                     child: const Text('Discard'),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _isSaving ? null : _repeatRide,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Repeat Ride'),
+                  ),
+                ),
+                const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: _isSaving ? null : _saveRide,

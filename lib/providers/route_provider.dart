@@ -19,6 +19,12 @@ class RouteProvider with ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get error => _error;
 
+  /// Set the current route (useful for repeating rides)
+  void setCurrentRoute(SavedRoute route) {
+    _currentRoute = route;
+    notifyListeners();
+  }
+
   /// Fetch route from start to end location
   Future<void> fetchRoute(String startInput, String endInput) async {
     _isLoading = true;
