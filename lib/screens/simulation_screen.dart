@@ -5,6 +5,8 @@ import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
+import 'package:free_ride/widgets/elevation_chart.dart';
+import 'package:free_ride/widgets/elevation_chart.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -115,46 +117,56 @@ class _SimulationScreenState extends State<SimulationScreen> {
       ),
       body: Column(
         children: [
-          // Map
+          // Map with floating button
           Expanded(
             flex: 3,
-            child: FlutterMap(
-              mapController: _mapController,
-              options: MapOptions(
-                initialCenter: route.coordinates.start,
-                initialZoom: AppConstants.defaultMapZoom,
-                minZoom: AppConstants.minMapZoom.toDouble(),
-                maxZoom: AppConstants.maxMapZoom.toDouble(),
-              ),
+            child: Stack(
               children: [
-                TileLayer(
-                  urlTemplate: AppConstants.osmTileUrl,
-                  userAgentPackageName: 'com.example.free_ride',
-                ),
-                PolylineLayer(
-                  polylines: [
-                    Polyline(
-                      points: waypoints,
-                      strokeWidth: 4.0,
-                      color: Colors.blue,
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: route.coordinates.start,
+                    initialZoom: AppConstants.defaultMapZoom,
+                    minZoom: AppConstants.minMapZoom.toDouble(),
+                    maxZoom: AppConstants.maxMapZoom.toDouble(),
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: AppConstants.osmTileUrl,
+                      userAgentPackageName: 'com.example.free_ride',
                     ),
+                    PolylineLayer(
+                      polylines: [
+                        Polyline(
+                          points: waypoints,
+                          strokeWidth: 4.0,
+                          color: Colors.blue,
+                        ),
+                      ],
+                    ),
+                    if (rideProvider.currentPosition != null)
+                      MarkerLayer(
+                        markers: [
+                          Marker(
+                            point: rideProvider.currentPosition!,
+                            width: 40,
+                            height: 40,
+                            child: const Icon(
+                              Icons.directions_bike,
+                              size: 40,
+                              color: Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
-                if (rideProvider.currentPosition != null)
-                  MarkerLayer(
-                    markers: [
-                      Marker(
-                        point: rideProvider.currentPosition!,
-                        width: 40,
-                        height: 40,
-                        child: const Icon(
-                          Icons.directions_bike,
-                          size: 40,
-                          color: Colors.green,
-                        ),
-                      ),
-                    ],
-                  ),
+                // Floating action button on map
+                Positioned(
+                  right: 16,
+                  bottom: 16,
+                  child: _buildPlayPauseButton(rideProvider),
+                ),
               ],
             ),
           ),
@@ -209,6 +221,12 @@ class _SimulationScreenState extends State<SimulationScreen> {
                     ],
                   ),
                   const Spacer(),
+                  // Elevation chart
+                  ElevationChart(
+                    route: route,
+                    currentProgress: rideProvider.completionPercentage / 100,
+                  ),
+                  const SizedBox(height: 8),
                   // Progress bar
                   LinearProgressIndicator(
                     value: rideProvider.completionPercentage / 100,
@@ -220,7 +238,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
           ),
         ],
       ),
-      floatingActionButton: _buildPlayPauseButton(rideProvider),
     );
   }
 
