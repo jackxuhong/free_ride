@@ -17,34 +17,6 @@ class SummaryScreen extends StatefulWidget {
 
 class _SummaryScreenState extends State<SummaryScreen> {
   final _storageService = RouteStorageService();
-  bool _isSaving = false;
-
-  Future<void> _saveRide() async {
-    setState(() => _isSaving = true);
-
-    try {
-      await _storageService.saveRideHistory(widget.summary);
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ride saved to history')),
-        );
-        Navigator.of(context).popUntil((route) => route.isFirst);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save ride: $e')),
-        );
-      }
-    } finally {
-      setState(() => _isSaving = false);
-    }
-  }
-
-  void _discardRide() {
-    Navigator.of(context).popUntil((route) => route.isFirst);
-  }
 
   Future<void> _repeatRide() async {
     // Reload the route from storage and navigate to simulation screen
@@ -106,6 +78,30 @@ class _SummaryScreenState extends State<SummaryScreen> {
                   ],
                 ),
               ),
+            ),
+            const SizedBox(height: 16),
+
+            // Action buttons
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.of(context).popUntil((route) => route.isFirst),
+                    child: const Text('Done'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: _repeatRide,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.orange,
+                      foregroundColor: Colors.white,
+                    ),
+                    child: const Text('Repeat Ride'),
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 16),
 
@@ -248,40 +244,26 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             const SizedBox(height: 32),
 
-            // Action buttons
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: _isSaving ? null : _discardRide,
-                    child: const Text('Discard'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _repeatRide,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.orange,
-                      foregroundColor: Colors.white,
+            // Info banner
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.green.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.green.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.check_circle, color: Colors.green, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Ride automatically saved to history',
+                      style: TextStyle(color: Colors.green.shade700),
                     ),
-                    child: const Text('Repeat Ride'),
                   ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _isSaving ? null : _saveRide,
-                    child: _isSaving
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('Save Ride'),
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ],
         ),

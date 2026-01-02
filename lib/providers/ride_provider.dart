@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/models/ride_summary.dart';
 import 'package:free_ride/services/ride_calculator.dart';
+import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -218,8 +219,21 @@ class RideProvider with ChangeNotifier {
     // Don't reset metrics here - let the next ride initialization do it
     // This keeps startTime available for UI navigation check
     
+    // Auto-save completed ride to history
+    _autoSaveRide(summary);
+    
     notifyListeners();
     return summary;
+  }
+
+  /// Auto-save ride to history
+  void _autoSaveRide(RideSummary summary) async {
+    try {
+      final storage = RouteStorageService();
+      await storage.saveRideHistory(summary);
+    } catch (e) {
+      // Silently fail - user can manually save from summary screen
+    }
   }
 
   /// Update simulation state

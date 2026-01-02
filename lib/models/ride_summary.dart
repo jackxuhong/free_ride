@@ -71,7 +71,7 @@ class RideSummary extends HiveObject {
   final String routeId;
   
   @HiveField(20)
-  final String routeName;
+  String routeName; // Made mutable for renaming
   
   @HiveField(21)
   final bool completed;

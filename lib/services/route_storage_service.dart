@@ -117,8 +117,20 @@ class RouteStorageService {
   }
 
   // Delete ride from history
-  Future<void> deleteRideHistory(int key) async {
-    await _historyBox.delete(key);
+  Future<void> deleteRideHistory(RideSummary summary) async {
+    final key = summary.key;
+    if (key != null) {
+      await _historyBox.delete(key);
+    }
+  }
+
+  // Update ride name
+  Future<void> updateRideName(RideSummary summary, String newName) async {
+    final key = summary.key;
+    if (key != null) {
+      summary.routeName = newName;
+      await summary.save();
+    }
   }
 
   // Clear all history
