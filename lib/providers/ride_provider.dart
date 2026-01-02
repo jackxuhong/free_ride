@@ -133,6 +133,10 @@ class RideProvider with ChangeNotifier {
     _simulationTimer?.cancel();
 
     final summary = _generateSummary(completed: false, cancellationReason: 'user_cancelled');
+    
+    // Auto-save cancelled ride to history
+    _autoSaveRide(summary);
+    
     _resetMetrics();
     
     notifyListeners();

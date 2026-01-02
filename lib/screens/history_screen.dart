@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/models/ride_summary.dart';
 import 'package:free_ride/screens/summary_screen.dart';
+import 'package:free_ride/screens/simulation_screen.dart';
+import 'package:free_ride/providers/route_provider.dart';
+import 'package:free_ride/providers/ride_provider.dart';
 
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
@@ -126,6 +130,40 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
+  Future<void> _continueRide(RideSummary summary) async {
+    // Load the route and continue from where it was left off
+    final route = _storageService.getRouteById(summary.routeId);
+    
+    if (route == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Route no longer available')),
+        );
+      }
+      return;
+    }
+
+    if (mounted) {
+      // Import required providers
+      final routeProvider = context.read<RouteProvider>();
+      final rideProvider = context.read<RideProvider>();
+      
+      routeProvider.setCurrentRoute(route);
+      rideProvider.initializeRide(route);
+      
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => SimulationScreen(),
+        ),
+      );
+    }
+  }
+
+  Future<void> _restartRide(RideSummary summary) async {
+    // Same as continue for now - restart from beginning
+    _continueRide(summary);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -169,6 +207,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       },
                       onDelete: () => _deleteRide(summary),
                       onRename: () => _renameRide(summary),
+                      onContinue: () => _continueRide(summary),
+                      onRestart: () => _restartRide(summary),
                     );
                   },
                 ),
@@ -181,12 +221,16 @@ class _RideHistoryCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onDelete;
   final VoidCallback onRename;
+  final VoidCallback onContinue;
+  final VoidCallback onRestart;
 
   const _RideHistoryCard({
     required this.summary,
     required this.onTap,
     required this.onDelete,
     required this.onRename,
+    required this.onContinue,
+    required this.onRestart,
   });
 
   @override
@@ -243,9 +287,45 @@ class _RideHistoryCard extends StatelessWidget {
               onRename();
             } else if (value == 'delete') {
               onDelete();
+            } else if (value == 'continue') {
+              onContinue();
+            } else if (value == 'restart') {
+              onRestart();
             }
           },
           itemBuilder: (context) => [
+            if (!summary.completed) ...[
+              const PopupMenuItem(
+                value: 'continue',
+                child: Row(
+                  children: [
+                    Icon(Icons.play_arrow, size: 20, color: Colors.green),
+                    SizedBox(width: 8),
+                    Text('Continue'),
+                  ],
+                ),
+              ),
+              const PopupMenuItem(
+                value: 'restart',
+                child: Row(
+                  children: [
+                    Icon(Icons.restart_alt, size: 20, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Restart'),
+                  ],
+                ),
+              ),
+            ] else
+              const PopupMenuItem(
+                value: 'restart',
+                child: Row(
+                  children: [
+                    Icon(Icons.restart_alt, size: 20, color: Colors.orange),
+                    SizedBox(width: 8),
+                    Text('Repeat'),
+                  ],
+                ),
+              ),
             const PopupMenuItem(
               value: 'rename',
               child: Row(
