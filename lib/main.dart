@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/services/route_storage_service.dart';
+import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/screens/home_screen.dart';
@@ -14,6 +15,7 @@ void main() async {
 
   // Initialize storage
   await RouteStorageService().init();
+  await ProfileService().init();
 
   runApp(const MyApp());
 }

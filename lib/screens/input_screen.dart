@@ -7,7 +7,6 @@ import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
-import 'package:free_ride/screens/history_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 
 class InputScreen extends StatefulWidget {
@@ -136,27 +135,6 @@ class _InputScreenState extends State<InputScreen> {
           SnackBar(content: Text('Failed to get route: $e')),
         );
       }
-    }
-  }
-
-  Future<void> _repeatLastRide() async {
-    final lastRoute = await _storageService.getLastRoute();
-    if (lastRoute == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('No previous route found')),
-        );
-      }
-      return;
-    }
-
-    if (mounted) {
-      context.read<RouteProvider>().loadRoute(lastRoute);
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (context) => const SimulationScreen(),
-        ),
-      );
     }
   }
 
