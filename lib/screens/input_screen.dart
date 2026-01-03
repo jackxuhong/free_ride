@@ -25,6 +25,7 @@ class _InputScreenState extends State<InputScreen> {
   final _geocodingService = GeocodingService();
   final _storageService = RouteStorageService();
   final _profileService = ProfileService();
+  final _previewMapController = MapController();
 
   bool _isLoadingStart = false;
   bool _isLoadingEnd = false;
@@ -37,6 +38,7 @@ class _InputScreenState extends State<InputScreen> {
     for (var controller in _waypointControllers) {
       controller.dispose();
     }
+    _previewMapController.dispose();
     super.dispose();
   }
 
@@ -509,52 +511,73 @@ class _InputScreenState extends State<InputScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: FlutterMap(
-                      options: MapOptions(
-                        initialCenter: routeProvider.currentRoute!.coordinates.start,
-                        initialZoom: 13,
-                      ),
-                      children: [
-                        TileLayer(
-                          urlTemplate: AppConstants.osmTileUrl,
-                          userAgentPackageName: 'com.example.free_ride',
-                        ),
-                        PolylineLayer(
-                          polylines: [
-                            Polyline(
-                              points: routeProvider.currentRoute!.coordinates.waypoints
-                                  .map((point) => point.toLatLng())
-                                  .toList(),
-                              strokeWidth: 4.0,
-                              color: Colors.blue,
+                    child: Builder(
+                      builder: (context) {
+                        // Fit bounds after the map is built
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          final waypoints = routeProvider.currentRoute!.coordinates.waypoints
+                              .map((point) => point.toLatLng())
+                              .toList();
+                          if (waypoints.isNotEmpty) {
+                            final bounds = LatLngBounds.fromPoints(waypoints);
+                            _previewMapController.fitCamera(
+                              CameraFit.bounds(
+                                bounds: bounds,
+                                padding: const EdgeInsets.all(50),
+                              ),
+                            );
+                          }
+                        });
+                        
+                        return FlutterMap(
+                          mapController: _previewMapController,
+                          options: MapOptions(
+                            initialCenter: routeProvider.currentRoute!.coordinates.start,
+                            initialZoom: 13,
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: AppConstants.osmTileUrl,
+                              userAgentPackageName: 'com.example.free_ride',
+                            ),
+                            PolylineLayer(
+                              polylines: [
+                                Polyline(
+                                  points: routeProvider.currentRoute!.coordinates.waypoints
+                                      .map((point) => point.toLatLng())
+                                      .toList(),
+                                  strokeWidth: 4.0,
+                                  color: Colors.blue,
+                                ),
+                              ],
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  point: routeProvider.currentRoute!.coordinates.start,
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    size: 40,
+                                    color: Colors.green,
+                                  ),
+                                ),
+                                Marker(
+                                  point: routeProvider.currentRoute!.coordinates.end,
+                                  width: 40,
+                                  height: 40,
+                                  child: const Icon(
+                                    Icons.flag,
+                                    size: 40,
+                                    color: Colors.red,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
-                        ),
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: routeProvider.currentRoute!.coordinates.start,
-                              width: 40,
-                              height: 40,
-                              child: const Icon(
-                                Icons.location_on,
-                                size: 40,
-                                color: Colors.green,
-                              ),
-                            ),
-                            Marker(
-                              point: routeProvider.currentRoute!.coordinates.end,
-                              width: 40,
-                              height: 40,
-                              child: const Icon(
-                                Icons.flag,
-                                size: 40,
-                                color: Colors.red,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 16),
