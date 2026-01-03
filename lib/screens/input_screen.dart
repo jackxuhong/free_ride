@@ -374,14 +374,33 @@ class _InputScreenState extends State<InputScreen> {
                   );
                 }).toList(),
                 
-                // Add waypoint button
-                OutlinedButton.icon(
-                  onPressed: _addWaypoint,
-                  icon: const Icon(Icons.add_location),
-                  label: const Text('Add Stop'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.all(12),
-                  ),
+                // Vertical dots and Add Stop button
+                Row(
+                  children: [
+                    Expanded(
+                      child: Center(
+                        child: Column(
+                          children: List.generate(
+                            3,
+                            (index) => Container(
+                              margin: const EdgeInsets.symmetric(vertical: 2),
+                              width: 4,
+                              height: 4,
+                              decoration: const BoxDecoration(
+                                color: Colors.grey,
+                                shape: BoxShape.circle,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.add_location),
+                      onPressed: _addWaypoint,
+                      tooltip: 'Add Stop',
+                    ),
+                  ],
                 ),
                 
                 // End location
