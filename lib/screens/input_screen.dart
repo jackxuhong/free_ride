@@ -125,20 +125,7 @@ class _InputScreenState extends State<InputScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Free Ride'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.history),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (context) => const HistoryScreen(),
-                ),
-              );
-            },
-            tooltip: 'Ride History',
-          ),
-        ],
+        title: const Text('Plan Your Ride'),
       ),
       body: Stack(
         children: [
