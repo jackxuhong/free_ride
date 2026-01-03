@@ -6,6 +6,7 @@ import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
+import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 
@@ -23,6 +24,7 @@ class _InputScreenState extends State<InputScreen> {
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
   final _storageService = RouteStorageService();
+  final _profileService = ProfileService();
 
   bool _isLoadingStart = false;
   bool _isLoadingEnd = false;
@@ -136,6 +138,20 @@ class _InputScreenState extends State<InputScreen> {
         );
       }
     }
+  }
+
+  Future<double> _calculateEstimatedCalories(double distanceKm, double elevationGainM) async {
+    // Get user's body weight from profile
+    final profile = await _profileService.getProfile();
+    final bodyWeightKg = profile?.bodyWeight ?? 70.0; // Default to 70kg if no profile
+    
+    // Calorie calculation for cycling:
+    // - Flat terrain: ~0.5 kcal per kg per km
+    // - Elevation gain: ~10 kcal per kg per 100m of elevation
+    final flatCalories = bodyWeightKg * distanceKm * 0.5;
+    final elevationCalories = bodyWeightKg * (elevationGainM / 100) * 10;
+    
+    return flatCalories + elevationCalories;
   }
 
   Future<void> _saveCurrentRoute() async {
@@ -454,6 +470,28 @@ class _InputScreenState extends State<InputScreen> {
                                   ),
                                   const Text('Elevation Gain'),
                                 ],
+                              ),
+                              FutureBuilder(
+                                future: _calculateEstimatedCalories(
+                                  routeProvider.currentRoute!.geometry.totalDistance / 1000,
+                                  routeProvider.currentRoute!.elevationProfile.totalElevationGain,
+                                ),
+                                builder: (context, snapshot) {
+                                  return Column(
+                                    children: [
+                                      const Icon(Icons.local_fire_department, size: 32),
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        snapshot.hasData ? '${snapshot.data!.toStringAsFixed(0)} kcal' : '--- kcal',
+                                        style: const TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      const Text('Est. Calories'),
+                                    ],
+                                  );
+                                },
                               ),
                             ],
                           ),

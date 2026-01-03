@@ -10,6 +10,11 @@ class AppConstants {
   static const String nominatimBaseUrl = 'https://nominatim.openstreetmap.org';
   static const Duration nominatimRateLimit = Duration(seconds: 1);
   
+  // Generate user agent with email from profile
+  static String getUserAgent(String email) {
+    return 'FreeRide/1.0 ($email)';
+  }
+  
   // Storage Configuration
   static const int maxHistorySize = 50;
   static const String routesBoxName = 'saved_routes';

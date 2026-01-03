@@ -9,9 +9,13 @@ class UserProfile extends HiveObject {
   
   @HiveField(1)
   double bodyWeight; // kg
+  
+  @HiveField(2, defaultValue: '')
+  String email;
 
   UserProfile({
     required this.name,
     required this.bodyWeight,
+    this.email = '',
   });
 }

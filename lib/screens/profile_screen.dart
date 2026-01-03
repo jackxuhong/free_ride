@@ -14,6 +14,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _weightController = TextEditingController();
   final _profileService = ProfileService();
   
@@ -30,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (profile != null && mounted) {
       setState(() {
         _nameController.text = profile.name;
+        _emailController.text = profile.email;
         _weightController.text = profile.bodyWeight.toString();
       });
     }
@@ -38,6 +40,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _emailController.dispose();
     _weightController.dispose();
     super.dispose();
   }
@@ -50,6 +53,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     try {
       final profile = UserProfile(
         name: _nameController.text.trim(),
+        email: _emailController.text.trim(),
         bodyWeight: double.parse(_weightController.text),
       );
 
@@ -105,6 +109,28 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 validator: (value) {
                   if (value == null || value.trim().isEmpty) {
                     return 'Please enter your name';
+                  }
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              
+              // Email field
+              TextFormField(
+                controller: _emailController,
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  hintText: 'Enter your email',
+                  prefixIcon: Icon(Icons.email_outlined),
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.emailAddress,
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  if (!value.contains('@') || !value.contains('.')) {
+                    return 'Please enter a valid email address';
                   }
                   return null;
                 },

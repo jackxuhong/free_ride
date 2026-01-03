@@ -19,17 +19,20 @@ class UserProfileAdapter extends TypeAdapter<UserProfile> {
     return UserProfile(
       name: fields[0] as String,
       bodyWeight: fields[1] as double,
+      email: fields[2] == null ? '' : fields[2] as String,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserProfile obj) {
     writer
-      ..writeByte(2)
+      ..writeByte(3)
       ..writeByte(0)
       ..write(obj.name)
       ..writeByte(1)
-      ..write(obj.bodyWeight);
+      ..write(obj.bodyWeight)
+      ..writeByte(2)
+      ..write(obj.email);
   }
 
   @override

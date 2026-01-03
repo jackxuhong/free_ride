@@ -18,7 +18,16 @@ class ProfileService {
       Hive.registerAdapter(UserProfileAdapter());
     }
     
-    _box = await Hive.openBox<UserProfile>(_boxName);
+    try {
+      _box = await Hive.openBox<UserProfile>(_boxName);
+    } catch (e) {
+      // If there's an error opening the box (e.g., schema mismatch),
+      // delete the corrupted box and create a new one
+      print('Error opening profile box: $e');
+      print('Deleting corrupted profile box and creating new one...');
+      await Hive.deleteBoxFromDisk(_boxName);
+      _box = await Hive.openBox<UserProfile>(_boxName);
+    }
   }
 
   Future<void> saveProfile(UserProfile profile) async {

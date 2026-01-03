@@ -4,12 +4,14 @@ import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:free_ride/utils/constants.dart';
+import 'package:free_ride/services/profile_service.dart';
 
 class GeocodingService {
   static final GeocodingService _instance = GeocodingService._internal();
   factory GeocodingService() => _instance;
   GeocodingService._internal();
 
+  final _profileService = ProfileService();
   DateTime? _lastNominatimCall;
 
   /// Geocode an address or coordinate string to LatLng
@@ -86,10 +88,16 @@ class GeocodingService {
       'q=${Uri.encodeComponent(address)}&format=json&limit=1',
     );
 
+    // Get user agent with email from profile
+    final profile = await _profileService.getProfile();
+    final userAgent = profile?.email != null && profile!.email.isNotEmpty
+        ? AppConstants.getUserAgent(profile.email)
+        : AppConstants.nominatimUserAgent;
+
     final response = await http.get(
       url,
       headers: {
-        'User-Agent': AppConstants.nominatimUserAgent,
+        'User-Agent': userAgent,
       },
     );
 
