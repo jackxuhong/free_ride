@@ -58,7 +58,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
     if (!confirmed || !mounted) return;
 
     final rideProvider = context.read<RideProvider>();
-    final summary = rideProvider.cancelRide();
+    final summary = await rideProvider.cancelRide();
 
     if (mounted) {
       Navigator.of(context).pushReplacement(
@@ -87,14 +87,16 @@ class _SimulationScreenState extends State<SimulationScreen> {
         rideProvider.startTime != null && 
         !_hasNavigatedToSummary) {
       _hasNavigatedToSummary = true;
-      WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted) {
-          final summary = rideProvider.completeRide();
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => SummaryScreen(summary: summary),
-            ),
-          );
+          final summary = await rideProvider.completeRide();
+          if (mounted) {
+            Navigator.of(context).pushReplacement(
+              MaterialPageRoute(
+                builder: (context) => SummaryScreen(summary: summary),
+              ),
+            );
+          }
         }
       });
     }

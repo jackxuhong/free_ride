@@ -298,13 +298,23 @@ class _RideHistoryCard extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
       child: ListTile(
         onTap: onTap,
-        leading: CircleAvatar(
-          backgroundColor: summary.completed ? Colors.green : Colors.orange,
-          child: Icon(
-            summary.completed ? Icons.check : Icons.cancel,
-            color: Colors.white,
-          ),
-        ),
+        leading: summary.routeThumbnail != null
+            ? ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.memory(
+                  summary.routeThumbnail!,
+                  width: 60,
+                  height: 60,
+                  fit: BoxFit.cover,
+                ),
+              )
+            : CircleAvatar(
+                backgroundColor: summary.completed ? Colors.green : Colors.orange,
+                child: Icon(
+                  summary.completed ? Icons.check : Icons.cancel,
+                  color: Colors.white,
+                ),
+              ),
         title: Text(
           summary.routeName,
           style: const TextStyle(fontWeight: FontWeight.bold),
@@ -328,10 +338,19 @@ class _RideHistoryCard extends StatelessWidget {
                   icon: Icons.timer,
                   value: summary.formattedDuration,
                 ),
-                const SizedBox(width: 16),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Row(
+              children: [
                 _SmallMetric(
                   icon: Icons.speed,
                   value: summary.formattedAverageSpeed,
+                ),
+                const SizedBox(width: 16),
+                _SmallMetric(
+                  icon: Icons.local_fire_department,
+                  value: '${summary.caloriesBurned} kcal',
                 ),
               ],
             ),

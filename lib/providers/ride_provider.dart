@@ -5,6 +5,7 @@ import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/models/ride_summary.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
+import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -120,7 +121,7 @@ class RideProvider with ChangeNotifier {
   }
 
   /// Cancel the ride
-  RideSummary cancelRide() {
+  Future<RideSummary> cancelRide() async {
     // If ride hasn't started, just reset without changing status to cancelled
     if (_startTime == null) {
       _resetMetrics();
@@ -132,7 +133,7 @@ class RideProvider with ChangeNotifier {
     _endTime = DateTime.now();
     _simulationTimer?.cancel();
 
-    final summary = _generateSummary(completed: false, cancellationReason: 'user_cancelled');
+    final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
     // Auto-save cancelled ride to history
     _autoSaveRide(summary);
@@ -144,7 +145,7 @@ class RideProvider with ChangeNotifier {
   }
 
   /// Complete the ride
-  RideSummary completeRide() {
+  Future<RideSummary> completeRide() async {
     // If already have a summary (already completed), return it
     if (_lastSummary != null) {
       return _lastSummary!;
@@ -189,7 +190,7 @@ class RideProvider with ChangeNotifier {
 
     RideSummary summary;
     try {
-      summary = _generateSummary(completed: true);
+      summary = await _generateSummary(completed: true);
     } catch (e) {
       // Return a basic summary if generation fails
       summary = RideSummary(
@@ -350,10 +351,10 @@ class RideProvider with ChangeNotifier {
   }
 
   /// Generate ride summary
-  RideSummary _generateSummary({
+  Future<RideSummary> _generateSummary({
     required bool completed,
     String? cancellationReason,
-  }) {
+  }) async {
     if (_route == null || _startTime == null) {
       throw Exception('Cannot generate summary without a route and start time');
     }
@@ -379,10 +380,15 @@ class RideProvider with ChangeNotifier {
             _route!.elevationProfile.elevations.sublist(0, _currentSegmentIndex + 1))
         : ElevationChange(gain: 0, loss: 0);
 
+    // Get user's body weight from profile
+    final profile = await ProfileService().getProfile();
+    final bodyWeight = profile?.bodyWeight ?? 70.0;
+
     final calories = RideCalculator.estimateCalories(
       distanceMeters: _completedDistance,
       elevationGainMeters: elevationChange.gain,
       duration: _movingTime,
+      riderWeightKg: bodyWeight,
     );
 
     final completionPercentage = _route!.geometry.totalDistance > 0

@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'package:hive/hive.dart';
 
 part 'ride_summary.g.dart';
@@ -78,6 +79,9 @@ class RideSummary extends HiveObject {
   
   @HiveField(22)
   final String? cancellationReason;
+  
+  @HiveField(23)
+  final Uint8List? routeThumbnail;
 
   RideSummary({
     required this.totalDuration,
@@ -103,6 +107,7 @@ class RideSummary extends HiveObject {
     required this.routeName,
     required this.completed,
     this.cancellationReason,
+    this.routeThumbnail,
   });
   
   String get formattedDuration {
@@ -154,6 +159,7 @@ class RideSummary extends HiveObject {
       routeName: routeName,
       completed: completed,
       cancellationReason: cancellationReason,
+      routeThumbnail: routeThumbnail,
     );
   }
 }
