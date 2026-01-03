@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
 import 'package:free_ride/screens/history_screen.dart';
+import 'package:free_ride/utils/constants.dart';
 
 class InputScreen extends StatefulWidget {
   const InputScreen({super.key});
@@ -124,14 +126,8 @@ class _InputScreenState extends State<InputScreen> {
         _endController.text,
         waypointInputs: waypoints.isNotEmpty ? waypoints : null,
       );
-
-      if (mounted && routeProvider.currentRoute != null) {
-        Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (context) => const SimulationScreen(),
-          ),
-        );
-      }
+      
+      // Route preview will show automatically when currentRoute is not null
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -313,6 +309,140 @@ class _InputScreenState extends State<InputScreen> {
                       ? const CircularProgressIndicator()
                       : const Text('Get Route', style: TextStyle(fontSize: 16)),
                 ),
+                
+                // Route Preview
+                if (routeProvider.currentRoute != null) ...[
+                  const SizedBox(height: 24),
+                  const Divider(),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Route Preview',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Route stats
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                            children: [
+                              Column(
+                                children: [
+                                  const Icon(Icons.straighten, size: 32),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${(routeProvider.currentRoute!.geometry.totalDistance / 1000).toStringAsFixed(2)} km',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Text('Distance'),
+                                ],
+                              ),
+                              Column(
+                                children: [
+                                  const Icon(Icons.trending_up, size: 32),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${routeProvider.currentRoute!.elevationProfile.totalElevationGain.toStringAsFixed(0)} m',
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  const Text('Elevation Gain'),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Map preview
+                  Container(
+                    height: 300,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: FlutterMap(
+                      options: MapOptions(
+                        initialCenter: routeProvider.currentRoute!.coordinates.start,
+                        initialZoom: 13,
+                      ),
+                      children: [
+                        TileLayer(
+                          urlTemplate: AppConstants.osmTileUrl,
+                          userAgentPackageName: 'com.example.free_ride',
+                        ),
+                        PolylineLayer(
+                          polylines: [
+                            Polyline(
+                              points: routeProvider.currentRoute!.coordinates.waypoints
+                                  .map((point) => point.toLatLng())
+                                  .toList(),
+                              strokeWidth: 4.0,
+                              color: Colors.blue,
+                            ),
+                          ],
+                        ),
+                        MarkerLayer(
+                          markers: [
+                            Marker(
+                              point: routeProvider.currentRoute!.coordinates.start,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(
+                                Icons.location_on,
+                                size: 40,
+                                color: Colors.green,
+                              ),
+                            ),
+                            Marker(
+                              point: routeProvider.currentRoute!.coordinates.end,
+                              width: 40,
+                              height: 40,
+                              child: const Icon(
+                                Icons.flag,
+                                size: 40,
+                                color: Colors.red,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Start Ride button
+                  ElevatedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const SimulationScreen(),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.directions_bike),
+                    label: const Text('Start Ride'),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                      backgroundColor: Colors.green,
+                      foregroundColor: Colors.white,
+                    ),
+                  ),
+                ],
+                
                 const SizedBox(height: 16),
                 // Repeat Last Ride button
                 OutlinedButton.icon(
