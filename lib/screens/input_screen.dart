@@ -18,68 +18,71 @@ class InputScreen extends StatefulWidget {
 }
 
 class _InputScreenState extends State<InputScreen> {
-  final _startController = TextEditingController();
-  final _endController = TextEditingController();
-  final List<TextEditingController> _waypointControllers = [];
+  // All locations in order: first is start, last is end, middle are stops
+  final List<TextEditingController> _locationControllers = [
+    TextEditingController(), // Start
+    TextEditingController(), // End
+  ];
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
   final _storageService = RouteStorageService();
   final _profileService = ProfileService();
   final _previewMapController = MapController();
 
-  bool _isLoadingStart = false;
-  bool _isLoadingEnd = false;
+  int? _loadingLocationIndex;
   String? _selectedRouteId;
 
   @override
   void dispose() {
-    _startController.dispose();
-    _endController.dispose();
-    for (var controller in _waypointControllers) {
+    for (var controller in _locationControllers) {
       controller.dispose();
     }
     _previewMapController.dispose();
     super.dispose();
   }
 
-  void _addWaypoint() {
+  void _addLocation() {
     setState(() {
-      _waypointControllers.add(TextEditingController());
+      // Insert before the last item (end location)
+      _locationControllers.insert(_locationControllers.length - 1, TextEditingController());
     });
   }
 
-  void _removeWaypoint(int index) {
+  void _removeLocation(int index) {
+    // Can't remove if only 2 locations (start and end)
+    if (_locationControllers.length <= 2) return;
+    
     setState(() {
-      _waypointControllers[index].dispose();
-      _waypointControllers.removeAt(index);
+      _locationControllers[index].dispose();
+      _locationControllers.removeAt(index);
     });
   }
 
-  void _moveWaypointUp(int index) {
+  void _moveLocationUp(int index) {
     if (index > 0) {
       setState(() {
-        final controller = _waypointControllers.removeAt(index);
-        _waypointControllers.insert(index - 1, controller);
+        final controller = _locationControllers.removeAt(index);
+        _locationControllers.insert(index - 1, controller);
       });
     }
   }
 
-  void _moveWaypointDown(int index) {
-    if (index < _waypointControllers.length - 1) {
+  void _moveLocationDown(int index) {
+    if (index < _locationControllers.length - 1) {
       setState(() {
-        final controller = _waypointControllers.removeAt(index);
-        _waypointControllers.insert(index + 1, controller);
+        final controller = _locationControllers.removeAt(index);
+        _locationControllers.insert(index + 1, controller);
       });
     }
   }
 
-  Future<void> _useCurrentLocationForStart() async {
-    setState(() => _isLoadingStart = true);
+  Future<void> _useCurrentLocation(int index) async {
+    setState(() => _loadingLocationIndex = index);
 
     try {
       final position = await _locationService.getCurrentPosition();
       final address = await _geocodingService.reverseGeocode(position);
-      _startController.text = address;
+      _locationControllers[index].text = address;
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -87,30 +90,12 @@ class _InputScreenState extends State<InputScreen> {
         );
       }
     } finally {
-      setState(() => _isLoadingStart = false);
-    }
-  }
-
-  Future<void> _useCurrentLocationForEnd() async {
-    setState(() => _isLoadingEnd = true);
-
-    try {
-      final position = await _locationService.getCurrentPosition();
-      final address = await _geocodingService.reverseGeocode(position);
-      _endController.text = address;
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to get location: $e')),
-        );
-      }
-    } finally {
-      setState(() => _isLoadingEnd = false);
+      setState(() => _loadingLocationIndex = null);
     }
   }
 
   Future<void> _getRoute() async {
-    if (_startController.text.isEmpty || _endController.text.isEmpty) {
+    if (_locationControllers.first.text.isEmpty || _locationControllers.last.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please enter start and end locations')),
       );
@@ -120,16 +105,18 @@ class _InputScreenState extends State<InputScreen> {
     try {
       final routeProvider = context.read<RouteProvider>();
       
-      // Get waypoint addresses
-      final waypoints = _waypointControllers
-          .map((c) => c.text)
-          .where((text) => text.isNotEmpty)
-          .toList();
+      // Get waypoints (all locations except first and last)
+      final waypoints = _locationControllers.length > 2
+          ? _locationControllers.sublist(1, _locationControllers.length - 1)
+              .map((c) => c.text)
+              .where((text) => text.isNotEmpty)
+              .toList()
+          : null;
       
       await routeProvider.fetchRoute(
-        _startController.text,
-        _endController.text,
-        waypointInputs: waypoints.isNotEmpty ? waypoints : null,
+        _locationControllers.first.text,
+        _locationControllers.last.text,
+        waypointInputs: waypoints,
       );
       
       // Route preview will show automatically when currentRoute is not null
@@ -213,15 +200,19 @@ class _InputScreenState extends State<InputScreen> {
     final route = _storageService.getRouteById(routeId);
     if (route == null) return;
 
-    // Populate fields
-    _startController.text = route.startAddress;
-    _endController.text = route.endAddress;
-
-    // Clear existing waypoints
-    for (var controller in _waypointControllers) {
-      controller.dispose();
+    // Clear existing controllers except first 2
+    while (_locationControllers.length > 2) {
+      _locationControllers.removeLast().dispose();
     }
-    _waypointControllers.clear();
+
+    // Set start and end
+    _locationControllers[0].text = route.startAddress;
+    _locationControllers[1].text = route.endAddress;
+
+    // Add waypoints (if any) - insert before end location
+    // waypoints are stored in the route, need to get them
+    // Since SavedRoute might not have waypoints field, we'll skip for now
+    // The route will be loaded into provider which has the waypoint data
 
     // Load the route into provider
     context.read<RouteProvider>().loadRoute(route);
@@ -290,148 +281,155 @@ class _InputScreenState extends State<InputScreen> {
                 ),
                 
                 // Start location
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _startController,
-                        decoration: const InputDecoration(
-                          labelText: 'Start Location',
-                          hintText: 'Enter address or lat,lng',
-                          prefixIcon: Icon(Icons.location_on),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: _isLoadingStart
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.my_location),
-                      onPressed: _isLoadingStart ? null : _useCurrentLocationForStart,
-                      tooltip: 'Use current location',
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                
-                // Waypoints section
-                ..._waypointControllers.asMap().entries.map((entry) {
+                // All locations section - dynamic labels based on position
+                ..._locationControllers.asMap().entries.map((entry) {
                   final index = entry.key;
                   final controller = entry.value;
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TextField(
-                            controller: controller,
-                            decoration: InputDecoration(
-                              labelText: 'Stop ${index + 1}',
-                              hintText: 'Enter address',
-                              prefixIcon: const Icon(Icons.place),
-                              border: const OutlineInputBorder(),
+                  final isFirst = index == 0;
+                  final isLast = index == _locationControllers.length - 1;
+                  
+                  // Determine label and icon
+                  String label;
+                  IconData icon;
+                  if (isFirst) {
+                    label = 'Start Location';
+                    icon = Icons.location_on;
+                  } else if (isLast) {
+                    label = 'End Location';
+                    icon = Icons.flag;
+                  } else {
+                    label = 'Stop ${index}';
+                    icon = Icons.place;
+                  }
+                  
+                  return Column(
+                    children: [
+                      if (index > 0) const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: controller,
+                              decoration: InputDecoration(
+                                labelText: label,
+                                hintText: 'Enter address or lat,lng',
+                                prefixIcon: Icon(icon),
+                                border: const OutlineInputBorder(),
+                              ),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
+                          const SizedBox(width: 8),
+                          
+                          // Show move buttons for middle items, location button for all
+                          if (!isFirst && !isLast) ...[
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_upward, size: 20),
+                                  onPressed: () => _moveLocationUp(index),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  tooltip: 'Move up',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_downward, size: 20),
+                                  onPressed: () => _moveLocationDown(index),
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  tooltip: 'Move down',
+                                ),
+                              ],
+                            ),
                             IconButton(
-                              icon: const Icon(Icons.arrow_upward, size: 20),
-                              onPressed: index > 0 ? () => _moveWaypointUp(index) : null,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
+                              icon: const Icon(Icons.close, color: Colors.red),
+                              onPressed: () => _removeLocation(index),
+                              tooltip: 'Remove stop',
+                            ),
+                          ] else ...[
+                            // Show move buttons for start/end locations
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_upward, size: 20),
+                                  onPressed: !isFirst ? () => _moveLocationUp(index) : null,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  tooltip: 'Move up',
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.arrow_downward, size: 20),
+                                  onPressed: !isLast ? () => _moveLocationDown(index) : null,
+                                  padding: EdgeInsets.zero,
+                                  constraints: const BoxConstraints(
+                                    minWidth: 32,
+                                    minHeight: 32,
+                                  ),
+                                  tooltip: 'Move down',
+                                ),
+                              ],
+                            ),
+                            IconButton(
+                              icon: _loadingLocationIndex == index
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.my_location),
+                              onPressed: _loadingLocationIndex == index
+                                  ? null
+                                  : () => _useCurrentLocation(index),
+                              tooltip: 'Use current location',
+                            ),
+                          ],
+                        ],
+                      ),
+                      
+                      // Add dots and button after each item except the last
+                      if (!isLast) ...[
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Center(
+                                child: Column(
+                                  children: List.generate(
+                                    3,
+                                    (index) => Container(
+                                      margin: const EdgeInsets.symmetric(vertical: 2),
+                                      width: 4,
+                                      height: 4,
+                                      decoration: const BoxDecoration(
+                                        color: Colors.grey,
+                                        shape: BoxShape.circle,
+                                      ),
+                                    ),
+                                  ),
+                                ),
                               ),
                             ),
                             IconButton(
-                              icon: const Icon(Icons.arrow_downward, size: 20),
-                              onPressed: index < _waypointControllers.length - 1
-                                  ? () => _moveWaypointDown(index)
-                                  : null,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                minWidth: 32,
-                                minHeight: 32,
-                              ),
+                              icon: const Icon(Icons.add_location),
+                              onPressed: _addLocation,
+                              tooltip: 'Add Stop',
                             ),
                           ],
                         ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.red),
-                          onPressed: () => _removeWaypoint(index),
-                          tooltip: 'Remove stop',
-                        ),
                       ],
-                    ),
+                    ],
                   );
                 }).toList(),
-                
-                // Vertical dots and Add Stop button
-                Row(
-                  children: [
-                    Expanded(
-                      child: Center(
-                        child: Column(
-                          children: List.generate(
-                            3,
-                            (index) => Container(
-                              margin: const EdgeInsets.symmetric(vertical: 2),
-                              width: 4,
-                              height: 4,
-                              decoration: const BoxDecoration(
-                                color: Colors.grey,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.add_location),
-                      onPressed: _addWaypoint,
-                      tooltip: 'Add Stop',
-                    ),
-                  ],
-                ),
-                
-                // End location
-                const SizedBox(height: 16),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _endController,
-                        decoration: const InputDecoration(
-                          labelText: 'End Location',
-                          hintText: 'Enter address or lat,lng',
-                          prefixIcon: Icon(Icons.flag),
-                          border: OutlineInputBorder(),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: _isLoadingEnd
-                          ? const SizedBox(
-                              width: 24,
-                              height: 24,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.my_location),
-                      onPressed: _isLoadingEnd ? null : _useCurrentLocationForEnd,
-                      tooltip: 'Use current location',
-                    ),
-                  ],
-                ),
                 const SizedBox(height: 24),
                 // Get Route button
                 ElevatedButton(
