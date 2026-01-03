@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
@@ -26,6 +27,7 @@ class _InputScreenState extends State<InputScreen> {
 
   bool _isLoadingStart = false;
   bool _isLoadingEnd = false;
+  String? _selectedRouteId;
 
   @override
   void dispose() {
@@ -158,6 +160,81 @@ class _InputScreenState extends State<InputScreen> {
     }
   }
 
+  Future<void> _saveCurrentRoute() async {
+    final routeProvider = context.read<RouteProvider>();
+    if (routeProvider.currentRoute == null) return;
+
+    final nameController = TextEditingController();
+    final name = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Save Route'),
+        content: TextField(
+          controller: nameController,
+          decoration: const InputDecoration(
+            labelText: 'Route Name',
+            hintText: 'e.g., Morning Commute',
+            border: OutlineInputBorder(),
+          ),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, nameController.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (name != null && name.isNotEmpty) {
+      try {
+        await _storageService.updateRouteName(
+          routeProvider.currentRoute!.id,
+          name,
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Route saved!')),
+          );
+          setState(() {}); // Refresh dropdown
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to save route: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  void _loadSavedRoute(String routeId) {
+    final route = _storageService.getRouteById(routeId);
+    if (route == null) return;
+
+    // Populate fields
+    _startController.text = route.startAddress;
+    _endController.text = route.endAddress;
+
+    // Clear existing waypoints
+    for (var controller in _waypointControllers) {
+      controller.dispose();
+    }
+    _waypointControllers.clear();
+
+    // Load the route into provider
+    context.read<RouteProvider>().loadRoute(route);
+    
+    setState(() {
+      _selectedRouteId = routeId;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final routeProvider = context.watch<RouteProvider>();
@@ -174,6 +251,48 @@ class _InputScreenState extends State<InputScreen> {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 const SizedBox(height: 20),
+                
+                // Saved routes dropdown
+                FutureBuilder<List<SavedRoute>>(
+                  future: Future.value(_storageService.getAllRoutes()),
+                  builder: (context, snapshot) {
+                    // Only show routes that have been explicitly saved with a custom name
+                    final routes = (snapshot.data ?? [])
+                        .where((route) => route.customName != null && route.customName!.isNotEmpty)
+                        .toList();
+                    if (routes.isEmpty) return const SizedBox.shrink();
+                    
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        DropdownButtonFormField<String>(
+                          value: _selectedRouteId,
+                          decoration: const InputDecoration(
+                            labelText: 'Load Saved Route',
+                            prefixIcon: Icon(Icons.bookmark),
+                            border: OutlineInputBorder(),
+                          ),
+                          hint: const Text('Select a saved route'),
+                          items: routes.map((route) {
+                            return DropdownMenuItem<String>(
+                              value: route.id,
+                              child: Text(route.displayName),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              _loadSavedRoute(value);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 16),
+                        const Divider(thickness: 2),
+                        const SizedBox(height: 8),
+                      ],
+                    );
+                  },
+                ),
+                
                 // Start location
                 Row(
                   children: [
@@ -441,18 +560,19 @@ class _InputScreenState extends State<InputScreen> {
                       foregroundColor: Colors.white,
                     ),
                   ),
+                  const SizedBox(height: 8),
+                  
+                  // Save Route button
+                  OutlinedButton.icon(
+                    onPressed: _saveCurrentRoute,
+                    icon: const Icon(Icons.bookmark_add),
+                    label: const Text('Save Route'),
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.all(16),
+                    ),
+                  ),
                 ],
                 
-                const SizedBox(height: 16),
-                // Repeat Last Ride button
-                OutlinedButton.icon(
-                  onPressed: _repeatLastRide,
-                  icon: const Icon(Icons.replay),
-                  label: const Text('Repeat Last Ride'),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
-                  ),
-                ),
                 if (routeProvider.error != null) ...[
                   const SizedBox(height: 16),
                   Card(
