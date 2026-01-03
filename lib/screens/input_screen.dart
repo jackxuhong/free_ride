@@ -17,6 +17,7 @@ class InputScreen extends StatefulWidget {
 class _InputScreenState extends State<InputScreen> {
   final _startController = TextEditingController();
   final _endController = TextEditingController();
+  final List<TextEditingController> _waypointControllers = [];
   final _locationService = LocationService();
   final _geocodingService = GeocodingService();
   final _storageService = RouteStorageService();
@@ -28,7 +29,41 @@ class _InputScreenState extends State<InputScreen> {
   void dispose() {
     _startController.dispose();
     _endController.dispose();
+    for (var controller in _waypointControllers) {
+      controller.dispose();
+    }
     super.dispose();
+  }
+
+  void _addWaypoint() {
+    setState(() {
+      _waypointControllers.add(TextEditingController());
+    });
+  }
+
+  void _removeWaypoint(int index) {
+    setState(() {
+      _waypointControllers[index].dispose();
+      _waypointControllers.removeAt(index);
+    });
+  }
+
+  void _moveWaypointUp(int index) {
+    if (index > 0) {
+      setState(() {
+        final controller = _waypointControllers.removeAt(index);
+        _waypointControllers.insert(index - 1, controller);
+      });
+    }
+  }
+
+  void _moveWaypointDown(int index) {
+    if (index < _waypointControllers.length - 1) {
+      setState(() {
+        final controller = _waypointControllers.removeAt(index);
+        _waypointControllers.insert(index + 1, controller);
+      });
+    }
   }
 
   Future<void> _useCurrentLocationForStart() async {
@@ -77,9 +112,17 @@ class _InputScreenState extends State<InputScreen> {
 
     try {
       final routeProvider = context.read<RouteProvider>();
+      
+      // Get waypoint addresses
+      final waypoints = _waypointControllers
+          .map((c) => c.text)
+          .where((text) => text.isNotEmpty)
+          .toList();
+      
       await routeProvider.fetchRoute(
         _startController.text,
         _endController.text,
+        waypointInputs: waypoints.isNotEmpty ? waypoints : null,
       );
 
       if (mounted && routeProvider.currentRoute != null) {
@@ -164,7 +207,74 @@ class _InputScreenState extends State<InputScreen> {
                   ],
                 ),
                 const SizedBox(height: 16),
+                
+                // Waypoints section
+                ..._waypointControllers.asMap().entries.map((entry) {
+                  final index = entry.key;
+                  final controller = entry.value;
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: controller,
+                            decoration: InputDecoration(
+                              labelText: 'Stop ${index + 1}',
+                              hintText: 'Enter address',
+                              prefixIcon: const Icon(Icons.place),
+                              border: const OutlineInputBorder(),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.arrow_upward, size: 20),
+                              onPressed: index > 0 ? () => _moveWaypointUp(index) : null,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.arrow_downward, size: 20),
+                              onPressed: index < _waypointControllers.length - 1
+                                  ? () => _moveWaypointDown(index)
+                                  : null,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                minWidth: 32,
+                                minHeight: 32,
+                              ),
+                            ),
+                          ],
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.red),
+                          onPressed: () => _removeWaypoint(index),
+                          tooltip: 'Remove stop',
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+                
+                // Add waypoint button
+                OutlinedButton.icon(
+                  onPressed: _addWaypoint,
+                  icon: const Icon(Icons.add_location),
+                  label: const Text('Add Stop'),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.all(12),
+                  ),
+                ),
+                
                 // End location
+                const SizedBox(height: 16),
                 Row(
                   children: [
                     Expanded(

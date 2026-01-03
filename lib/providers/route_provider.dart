@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:uuid/uuid.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/openroute_service.dart';
@@ -25,8 +26,12 @@ class RouteProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Fetch route from start to end location
-  Future<void> fetchRoute(String startInput, String endInput) async {
+  /// Fetch route from start to end location with optional waypoints
+  Future<void> fetchRoute(
+    String startInput,
+    String endInput, {
+    List<String>? waypointInputs,
+  }) async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -36,6 +41,14 @@ class RouteProvider with ChangeNotifier {
       final startLatLng = await _geocodingService.geocode(startInput);
       final endLatLng = await _geocodingService.geocode(endInput);
 
+      // Geocode waypoints if provided
+      List<LatLng>? waypointLatLngs;
+      if (waypointInputs != null && waypointInputs.isNotEmpty) {
+        waypointLatLngs = await Future.wait(
+          waypointInputs.map((w) => _geocodingService.geocode(w)),
+        );
+      }
+
       // Get readable addresses
       final startAddress = await _geocodingService.reverseGeocode(startLatLng);
       final endAddress = await _geocodingService.reverseGeocode(endLatLng);
@@ -44,6 +57,7 @@ class RouteProvider with ChangeNotifier {
       final routeResponse = await _openRouteService.getRoute(
         startLatLng,
         endLatLng,
+        waypoints: waypointLatLngs,
       );
 
       // Parse route data

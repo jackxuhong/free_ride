@@ -11,17 +11,27 @@ class OpenRouteService {
 
   String get _apiKey => dotenv.env['OPENROUTE_SERVICE_API_KEY'] ?? '';
 
-  /// Get cycling route between two points
-  Future<Map<String, dynamic>> getRoute(LatLng start, LatLng end) async {
+  /// Get cycling route with optional waypoints between start and end
+  /// waypoints: list of intermediate stops between start and end
+  Future<Map<String, dynamic>> getRoute(
+    LatLng start,
+    LatLng end, {
+    List<LatLng>? waypoints,
+  }) async {
     final url = Uri.parse(
       '${AppConstants.openRouteServiceBaseUrl}${AppConstants.directionsEndpoint}',
     );
 
+    // Build coordinates array: start, waypoints (if any), end
+    final coordinates = <List<double>>[
+      [start.longitude, start.latitude],
+      if (waypoints != null)
+        ...waypoints.map((w) => [w.longitude, w.latitude]),
+      [end.longitude, end.latitude],
+    ];
+
     final body = json.encode({
-      'coordinates': [
-        [start.longitude, start.latitude],
-        [end.longitude, end.latitude],
-      ],
+      'coordinates': coordinates,
       'elevation': true,
       'instructions': false,
     });
