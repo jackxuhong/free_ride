@@ -64,45 +64,8 @@ class ElevationChart extends StatelessWidget {
               );
             },
           ),
-          titlesData: FlTitlesData(
-            show: true,
-            rightTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            topTitles: const AxisTitles(
-              sideTitles: SideTitles(showTitles: false),
-            ),
-            leftTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 40,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    '${value.toInt()}m',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 10,
-                    ),
-                  );
-                },
-              ),
-            ),
-            bottomTitles: AxisTitles(
-              sideTitles: SideTitles(
-                showTitles: true,
-                reservedSize: 22,
-                interval: maxDistance / 4,
-                getTitlesWidget: (value, meta) {
-                  return Text(
-                    '${value.toStringAsFixed(1)}km',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 10,
-                    ),
-                  );
-                },
-              ),
-            ),
+          titlesData: const FlTitlesData(
+            show: false,
           ),
           borderData: FlBorderData(
             show: true,
