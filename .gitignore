@@ -45,3 +45,19 @@ app.*.map.json
 /android/app/release
 *.env
 .env
+
+# iOS specific
+**/ios/Pods/
+**/ios/.symlinks/
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral
+**/ios/Flutter/flutter_export_environment.sh
+**/ios/Podfile.lock
+**/ios/.generated/
+**/ios/.xcworkspace/
+**/ios/Runner.xcworkspace/xcshareddata/
+**/ios/Runner.xcodeproj/xcuserdata/
+**/ios/Runner.xcodeproj/project.xcworkspace/xcuserdata/
