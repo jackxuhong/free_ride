@@ -164,6 +164,47 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _continueRide(summary);
   }
 
+  Future<void> _clearAllHistory() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Clear All History'),
+        content: const Text(
+          'Are you sure you want to delete all ride history? This action cannot be undone.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Clear All'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      try {
+        await _storageService.clearAllHistory();
+        _loadHistory();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('All history cleared')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to clear history: $e')),
+          );
+        }
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -192,9 +233,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   ),
                 )
               : ListView.builder(
-                  itemCount: _history.length,
+                  itemCount: _history.length + 1, // +1 for the clear button
                   padding: const EdgeInsets.all(8),
                   itemBuilder: (context, index) {
+                    // Show clear button at the end
+                    if (index == _history.length) {
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 8),
+                        child: OutlinedButton.icon(
+                          onPressed: _clearAllHistory,
+                          icon: const Icon(Icons.delete_sweep),
+                          label: const Text('Clear All History'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.red,
+                            padding: const EdgeInsets.all(16),
+                          ),
+                        ),
+                      );
+                    }
+                    
                     final summary = _history[index];
                     return _RideHistoryCard(
                       summary: summary,
