@@ -19,6 +19,7 @@ class RideProvider with ChangeNotifier {
   int _currentSegmentIndex = 0;
   double _progressInSegment = 0.0; // 0.0 to 1.0
   LatLng? _currentPosition;
+  double _currentBearing = 0.0; // Direction of travel in degrees
 
   // Time tracking
   DateTime? _startTime;
@@ -52,6 +53,7 @@ class RideProvider with ChangeNotifier {
   // Getters
   RideStatus get status => _status;
   LatLng? get currentPosition => _currentPosition;
+  double get currentBearing => _currentBearing;
   double get currentSpeed => _currentSpeed;
   double get currentElevation => _currentElevation;
   double get currentGrade => _currentGrade * 100; // Return as percentage
@@ -343,6 +345,10 @@ class RideProvider with ChangeNotifier {
     final lat = start.latitude + (end.latitude - start.latitude) * _progressInSegment;
     final lng = start.longitude + (end.longitude - start.longitude) * _progressInSegment;
     _currentPosition = LatLng(lat, lng);
+
+    // Calculate bearing for this segment
+    final distance = const Distance();
+    _currentBearing = distance.bearing(start, end);
 
     // Interpolate elevation
     final startElev = _route!.elevationProfile.elevations[_currentSegmentIndex];

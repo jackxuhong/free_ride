@@ -6,7 +6,6 @@ import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
-import 'package:free_ride/widgets/elevation_chart.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -18,6 +17,8 @@ class SimulationScreen extends StatefulWidget {
 class _SimulationScreenState extends State<SimulationScreen> {
   final _mapController = MapController();
   bool _hasNavigatedToSummary = false;
+  bool _isNavigationMode = true; // Navigation mode on by default
+  bool _autoFollow = true; // Track if auto-follow is enabled
 
   @override
   void initState() {
@@ -27,6 +28,24 @@ class _SimulationScreenState extends State<SimulationScreen> {
     if (route != null) {
       context.read<RideProvider>().initializeRide(route);
     }
+  }
+
+  @override
+  void dispose() {
+    _mapController.dispose();
+    super.dispose();
+  }
+
+  void _toggleNavigationMode() {
+    setState(() {
+      _isNavigationMode = !_isNavigationMode;
+    });
+  }
+
+  void _recenterMap() {
+    setState(() {
+      _autoFollow = true;
+    });
   }
 
   Future<bool> _showCancelDialog() async {
@@ -82,6 +101,21 @@ class _SimulationScreenState extends State<SimulationScreen> {
       );
     }
 
+    // Always center map on current position if auto-follow is enabled
+    if (_autoFollow && rideProvider.currentPosition != null) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          // Set rotation based on navigation mode
+          final rotation = _isNavigationMode ? -rideProvider.currentBearing : 0.0;
+          _mapController.moveAndRotate(
+            rideProvider.currentPosition!,
+            16.0, // Always use zoom level 16
+            rotation,
+          );
+        }
+      });
+    }
+
     // Check if ride completed (but only if it was actually started)
     if (rideProvider.status == RideStatus.completed && 
         rideProvider.startTime != null && 
@@ -128,9 +162,26 @@ class _SimulationScreenState extends State<SimulationScreen> {
                   mapController: _mapController,
                   options: MapOptions(
                     initialCenter: route.coordinates.start,
-                    initialZoom: AppConstants.defaultMapZoom,
+                    initialZoom: 16.0,
                     minZoom: AppConstants.minMapZoom.toDouble(),
                     maxZoom: AppConstants.maxMapZoom.toDouble(),
+                    onMapEvent: (event) {
+                      // Detect manual map interaction
+                      if (_autoFollow && 
+                          (event is MapEventMove || event is MapEventRotate) &&
+                          event.source == MapEventSource.mapController) {
+                        // Allow programmatic moves
+                        return;
+                      }
+                      if (_autoFollow && 
+                          (event is MapEventMove || event is MapEventRotate) &&
+                          event.source != MapEventSource.mapController) {
+                        // User manually moved/rotated the map
+                        setState(() {
+                          _autoFollow = false;
+                        });
+                      }
+                    },
                   ),
                   children: [
                     TileLayer(
@@ -163,11 +214,40 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       ),
                   ],
                 ),
-                // Floating action button on map
+                // Floating buttons on map
                 Positioned(
                   right: 16,
                   bottom: 16,
-                  child: _buildPlayPauseButton(rideProvider),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Recenter button (shown when auto-follow is off)
+                      if (!_autoFollow)
+                        FloatingActionButton(
+                          heroTag: 'recenter',
+                          mini: true,
+                          onPressed: _recenterMap,
+                          backgroundColor: Colors.white,
+                          foregroundColor: Colors.blue,
+                          child: const Icon(Icons.my_location),
+                        ),
+                      if (!_autoFollow) const SizedBox(height: 8),
+                      // Navigation mode toggle
+                      FloatingActionButton(
+                        heroTag: 'navigation',
+                        mini: true,
+                        onPressed: _toggleNavigationMode,
+                        backgroundColor: _isNavigationMode ? Colors.blue : Colors.white,
+                        foregroundColor: _isNavigationMode ? Colors.white : Colors.grey,
+                        child: Icon(
+                          _isNavigationMode ? Icons.navigation : Icons.navigation_outlined,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      // Play/pause button
+                      _buildPlayPauseButton(rideProvider),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -246,17 +326,20 @@ class _SimulationScreenState extends State<SimulationScreen> {
   Widget _buildPlayPauseButton(RideProvider rideProvider) {
     if (rideProvider.status == RideStatus.running) {
       return FloatingActionButton(
+        heroTag: 'playPause',
         onPressed: () => rideProvider.pauseRide(),
         child: const Icon(Icons.pause),
       );
     } else if (rideProvider.status == RideStatus.paused) {
       return FloatingActionButton(
+        heroTag: 'playPause',
         onPressed: () => rideProvider.resumeRide(),
         backgroundColor: Colors.green,
         child: const Icon(Icons.play_arrow),
       );
     } else {
       return FloatingActionButton(
+        heroTag: 'playPause',
         onPressed: () => rideProvider.startRide(),
         backgroundColor: Colors.green,
         child: const Icon(Icons.play_arrow),
