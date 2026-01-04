@@ -270,15 +270,22 @@ class _SimulationScreenState extends State<SimulationScreen> {
                     ),
                     if (rideProvider.currentPosition != null)
                       MarkerLayer(
+                        rotate: false,
                         markers: [
                           Marker(
                             point: rideProvider.currentPosition!,
                             width: 40,
                             height: 40,
-                            child: const Icon(
-                              Icons.directions_bike,
-                              size: 40,
-                              color: Colors.green,
+                            alignment: Alignment.center,
+                            child: Transform.rotate(
+                              angle: _isNavigationMode ? rideProvider.currentBearing * (3.14159265359 / 180) : 0,
+                              child: Icon(
+                                rideProvider.activeDevice?.deviceType.name == 'treadmill'
+                                    ? Icons.directions_run
+                                    : Icons.directions_bike,
+                                size: 40,
+                                color: Colors.green,
+                              ),
                             ),
                           ),
                         ],
