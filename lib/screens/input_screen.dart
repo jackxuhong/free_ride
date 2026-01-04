@@ -287,8 +287,6 @@ class _InputScreenState extends State<InputScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20),
-                
                 // Device Selection Card (moved to top)
                 Consumer<DeviceProvider>(
                   builder: (context, deviceProvider, _) {
