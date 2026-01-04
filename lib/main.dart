@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/device_storage_service.dart';
@@ -16,6 +17,9 @@ void main() async {
 
   // Load environment variables
   await dotenv.load();
+  
+  // Disable flutter_blue_plus verbose logging
+  FlutterBluePlus.setLogLevel(LogLevel.error);
 
   // Initialize storage
   await RouteStorageService().init();

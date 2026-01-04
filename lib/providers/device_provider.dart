@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/device_storage_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
@@ -42,11 +43,19 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Select a device
   Future<void> selectDevice(FTMSDevice device) async {
+    // Dispose old active device if it exists
+    if (_activeDevice != null && _selectedDevice?.id != device.id) {
+      _activeDevice?.dispose();
+      _activeDevice = null;
+    }
+    
     _selectedDevice = device;
     await _storage.setLastUsedDeviceId(device.id);
     
-    // Create active device instance
-    _activeDevice = _createActiveDevice(device);
+    // Only create new active device if we don't have one or device changed
+    if (_activeDevice == null) {
+      _activeDevice = _createActiveDevice(device);
+    }
     
     notifyListeners();
   }
@@ -65,9 +74,30 @@ class DeviceProvider extends ChangeNotifier {
         );
       }
     } else {
-      // Create FTMS service for real device
+      // Create FTMS service for real device (don't connect yet)
+      // Connection will be initiated when ride starts
       return FTMSService(device: device);
     }
+  }
+
+  /// Remove a device
+  Future<void> removeDevice(String deviceId) async {
+    // Don't allow removing virtual devices
+    final device = _storage.getDevice(deviceId);
+    if (device?.isVirtual == true) {
+      throw Exception('Cannot remove virtual devices');
+    }
+    
+    // Dispose active device if removing the selected one
+    if (_selectedDevice?.id == deviceId) {
+      _activeDevice?.dispose();
+      _activeDevice = null;
+      _selectedDevice = null;
+    }
+    
+    await _storage.deleteDevice(deviceId);
+    await _loadDevices();
+    notifyListeners();
   }
 
   /// Update virtual device parameters
@@ -82,13 +112,20 @@ class DeviceProvider extends ChangeNotifier {
       controllableParam: controllableParam,
     );
     
-    // Reload devices and recreate active device if this is selected device
+    // Reload devices and update parameters for virtual devices only
     await _loadDevices();
     if (_selectedDevice?.id == deviceId) {
       final device = _storage.getDevice(deviceId);
       if (device != null) {
         _selectedDevice = device;
-        _activeDevice = _createActiveDevice(device);
+        
+        // Only recreate active device for virtual devices
+        // Real FTMS devices should maintain their connection
+        if (device.isVirtual && _activeDevice != null) {
+          _activeDevice?.dispose();
+          _activeDevice = _createActiveDevice(device);
+        }
+        
         notifyListeners();
       }
     }
@@ -102,11 +139,14 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Scan for FTMS devices
-      final devices = await FTMSService.scanForDevices();
+      // Scan for FTMS devices with type detection
+      final deviceInfoList = await FTMSService.scanForDevices();
       
       // Convert to FTMSDevice models and save
-      for (var bleDevice in devices) {
+      for (var deviceInfo in deviceInfoList) {
+        final bleDevice = deviceInfo['device'] as BluetoothDevice;
+        final deviceType = deviceInfo['deviceType'] as DeviceType;
+        
         // Check if already saved
         final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
         if (existing == null) {

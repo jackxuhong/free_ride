@@ -4,6 +4,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
+import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
@@ -224,6 +225,48 @@ class _SimulationScreenState extends State<SimulationScreen> {
       ),
       body: Column(
         children: [
+          // Connection status banner for FTMS devices
+          if (rideProvider.activeDevice is FTMSService)
+            StreamBuilder<bool>(
+              stream: (rideProvider.activeDevice as FTMSService).connectionState,
+              initialData: (rideProvider.activeDevice as FTMSService).isConnected,
+              builder: (context, snapshot) {
+                final isConnected = snapshot.data ?? false;
+                if (isConnected) return const SizedBox.shrink();
+                
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  color: Colors.orange,
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Device disconnected - Reconnecting...',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _cancelRide,
+                        child: const Text(
+                          'CANCEL',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           // Map with floating button
           Expanded(
             flex: 3,

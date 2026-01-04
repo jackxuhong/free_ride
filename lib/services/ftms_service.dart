@@ -13,16 +13,58 @@ class FTMSService extends VirtualFitnessDevice {
   
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _dataCharacteristic;
+  BluetoothCharacteristic? _controlCharacteristic;
   StreamSubscription? _dataSubscription;
+  StreamSubscription? _connectionStateSubscription;
+  bool _isReconnecting = false;
+  bool _isConnected = false;
+  
+  // Device capabilities
+  int _minResistance = 1;
+  int _maxResistance = 20;
+  double _minIncline = -3.0;
+  double _maxIncline = 15.0;
   
   final StreamController<DeviceDataSnapshot> _dataController = StreamController.broadcast();
+  final StreamController<bool> _connectionStateController = StreamController.broadcast();
   DeviceDataSnapshot? _lastSnapshot;
+  
+  /// Stream of connection state (true = connected, false = disconnected)
+  Stream<bool> get connectionState => _connectionStateController.stream;
+  
+  /// Current connection state
+  bool get isConnected => _isConnected;
+  
+  /// Device resistance range
+  int get minResistance => _minResistance;
+  int get maxResistance => _maxResistance;
+  
+  /// Device incline range
+  double get minIncline => _minIncline;
+  double get maxIncline => _maxIncline;
 
   // FTMS UUIDs
   static const String ftmsServiceUuid = '00001826-0000-1000-8000-00805f9b34fb';
   static const String indoorBikeDataUuid = '00002ad2-0000-1000-8000-00805f9b34fb';
   static const String treadmillDataUuid = '00002acd-0000-1000-8000-00805f9b34fb';
   static const String controlPointUuid = '00002ad9-0000-1000-8000-00805f9b34fb';
+  static const String resistanceRangeUuid = '00002ad6-0000-1000-8000-00805f9b34fb';
+  static const String inclineRangeUuid = '00002ad5-0000-1000-8000-00805f9b34fb';
+  
+  /// Normalize UUID to short form for comparison (e.g., "1826" or "00001826-0000-1000-8000-00805f9b34fb" -> "1826")
+  static String _normalizeUuid(String uuid) {
+    final cleaned = uuid.toLowerCase().replaceAll('-', '');
+    // If it's a standard Bluetooth UUID (128-bit with base), extract the 16-bit part
+    if (cleaned.length == 32 && cleaned.startsWith('0000') && cleaned.endsWith('00805f9b34fb')) {
+      return cleaned.substring(4, 8);
+    }
+    // If it's already short form (4 characters), return as is
+    if (cleaned.length == 4) {
+      return cleaned;
+    }
+    // Otherwise return the full UUID
+    return cleaned;
+  }
 
   FTMSService({required this.device}) : _deviceType = device.deviceType;
 
@@ -30,8 +72,9 @@ class FTMSService extends VirtualFitnessDevice {
   DeviceType get deviceType => _deviceType;
 
   /// Scan for FTMS devices
-  static Future<List<BluetoothDevice>> scanForDevices() async {
-    final devices = <BluetoothDevice>[];
+  static Future<List<Map<String, dynamic>>> scanForDevices() async {
+    final deviceInfoList = <Map<String, dynamic>>[];
+    final scannedDevices = <BluetoothDevice>[];
     
     try {
       // Check if Bluetooth is available
@@ -48,8 +91,8 @@ class FTMSService extends VirtualFitnessDevice {
       // Listen to scan results
       final subscription = FlutterBluePlus.scanResults.listen((results) {
         for (var result in results) {
-          if (!devices.contains(result.device)) {
-            devices.add(result.device);
+          if (!scannedDevices.contains(result.device)) {
+            scannedDevices.add(result.device);
           }
         }
       });
@@ -57,39 +100,240 @@ class FTMSService extends VirtualFitnessDevice {
       await Future.delayed(const Duration(seconds: 10));
       await subscription.cancel();
       await FlutterBluePlus.stopScan();
+      
+      // Now connect to each device to determine its type
+      for (var device in scannedDevices) {
+        try {
+          // print('Connecting to ${device.platformName} to determine type...');
+          await device.connect(timeout: const Duration(seconds: 5));
+          
+          // Discover services
+          final services = await device.discoverServices();
+          final ftmsService = services.firstWhere(
+            (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
+            orElse: () => throw Exception('FTMS service not found'),
+          );
+          
+          // Check which characteristics are present
+          final hasBikeData = ftmsService.characteristics.any(
+            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(indoorBikeDataUuid),
+          );
+          final hasTreadmillData = ftmsService.characteristics.any(
+            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(treadmillDataUuid),
+          );
+          
+          // Determine device type
+          DeviceType deviceType = DeviceType.indoorBike; // default
+          if (hasTreadmillData && !hasBikeData) {
+            deviceType = DeviceType.treadmill;
+          }
+          
+          deviceInfoList.add({
+            'device': device,
+            'deviceType': deviceType,
+          });
+          
+          // print('Found ${deviceType == DeviceType.indoorBike ? "bike" : "treadmill"}: ${device.platformName}');
+          
+          // Disconnect after getting info and wait for disconnect to complete
+          await device.disconnect();
+          await Future.delayed(const Duration(milliseconds: 500));
+        } catch (e) {
+          print('Error connecting to ${device.platformName}: $e');
+          // Add with default type if connection fails
+          deviceInfoList.add({
+            'device': device,
+            'deviceType': DeviceType.indoorBike,
+          });
+          try {
+            await device.disconnect();
+          } catch (_) {}
+        }
+      }
     } catch (e) {
       print('Error scanning for devices: $e');
     }
 
-    return devices;
+    return deviceInfoList;
   }
 
   /// Connect to the device
   Future<bool> connect() async {
     try {
-      if (device.deviceAddress == null) return false;
+      if (device.deviceAddress == null) {
+        // print('Cannot connect: device address is null');
+        return false;
+      }
 
-      // TODO: Implement actual Bluetooth connection
-      // This is a stub - real implementation would:
-      // 1. Get BluetoothDevice from address
-      // 2. Connect to device
-      // 3. Discover services
-      // 4. Subscribe to data characteristic
-      // 5. Set up data parsing
+      // print('Attempting to connect to device: ${device.name}');
+      
+      // Get all connected and available devices
+      final connectedDevices = FlutterBluePlus.connectedDevices;
+      _connectedDevice = connectedDevices.firstWhere(
+        (d) => d.remoteId.toString() == device.deviceAddress,
+        orElse: () => BluetoothDevice(remoteId: DeviceIdentifier(device.deviceAddress!)),
+      );
 
-      return false; // Stub return
+      // Check current connection state
+      final connectionState = await _connectedDevice!.connectionState.first;
+      // print('Current connection state: $connectionState');
+      
+      // Connect if not already connected
+      if (connectionState == BluetoothConnectionState.disconnected) {
+        // print('Connecting to device...');
+        await _connectedDevice!.connect(timeout: const Duration(seconds: 15));
+        // print('Connected successfully');
+      } else {
+        // print('Device already connected');
+      }
+
+      // Discover services
+      // print('Discovering services...');
+      final services = await _connectedDevice!.discoverServices();
+      // print('Found ${services.length} services');
+      
+      // Log all service UUIDs for debugging
+      // print('Available services:');
+      // for (var service in services) {
+      //   print('  - ${service.uuid.toString()}');
+      // }
+      // print('Looking for FTMS service: $ftmsServiceUuid');
+      
+      // Find FTMS service
+      final ftmsService = services.firstWhere(
+        (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
+        orElse: () => throw Exception('FTMS service not found'),
+      );
+      // print('Found FTMS service with ${ftmsService.characteristics.length} characteristics');
+      
+      // Read device capabilities for bikes
+      if (_deviceType == DeviceType.indoorBike) {
+        try {
+          final resistanceRangeChar = ftmsService.characteristics.firstWhere(
+            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(resistanceRangeUuid),
+          );
+          final value = await resistanceRangeChar.read();
+          if (value.length >= 6) {
+            // Format: min (sint16), max (sint16), increment (uint16)
+            _minResistance = ByteData.sublistView(Uint8List.fromList(value.sublist(0, 2))).getInt16(0, Endian.little);
+            _maxResistance = ByteData.sublistView(Uint8List.fromList(value.sublist(2, 4))).getInt16(0, Endian.little);
+            print('Device resistance range: $_minResistance - $_maxResistance');
+          }
+        } catch (e) {
+          // Use defaults if characteristic not found or read fails
+        }
+      }
+      
+      // Read incline range for treadmills
+      if (_deviceType == DeviceType.treadmill) {
+        try {
+          final inclineRangeChar = ftmsService.characteristics.firstWhere(
+            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(inclineRangeUuid),
+          );
+          final value = await inclineRangeChar.read();
+          if (value.length >= 6) {
+            // Format: min (sint16), max (sint16), increment (uint16)
+            // Values are in 0.1% resolution
+            _minIncline = ByteData.sublistView(Uint8List.fromList(value.sublist(0, 2))).getInt16(0, Endian.little) / 10.0;
+            _maxIncline = ByteData.sublistView(Uint8List.fromList(value.sublist(2, 4))).getInt16(0, Endian.little) / 10.0;
+          }
+        } catch (e) {
+          // Use defaults if characteristic not found or read fails
+        }
+      }
+
+      // Find the appropriate data characteristic based on device type
+      final dataCharUuid = _deviceType == DeviceType.indoorBike 
+          ? indoorBikeDataUuid 
+          : treadmillDataUuid;
+      
+      _dataCharacteristic = ftmsService.characteristics.firstWhere(
+        (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(dataCharUuid),
+        orElse: () => throw Exception('Data characteristic not found'),
+      );
+      
+      // Find and cache the control point characteristic
+      try {
+        _controlCharacteristic = ftmsService.characteristics.firstWhere(
+          (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(controlPointUuid),
+        );
+        print('Control point characteristic found and cached');
+      } catch (e) {
+        print('Warning: Control point characteristic not found - device may not support control commands');
+      }
+
+      // Subscribe to notifications
+      await _dataCharacteristic!.setNotifyValue(true);
+      
+      _dataSubscription = _dataCharacteristic!.lastValueStream.listen((value) {
+        if (value.isNotEmpty) {
+          final snapshot = _deviceType == DeviceType.indoorBike
+              ? _parseIndoorBikeData(value)
+              : _parseTreadmillData(value);
+          _lastSnapshot = snapshot;
+          _dataController.add(snapshot);
+        }
+      });
+      
+      // Monitor connection state for auto-reconnection
+      _connectionStateSubscription = _connectedDevice!.connectionState.listen((state) {
+        if (state == BluetoothConnectionState.disconnected && !_isReconnecting) {
+          _isConnected = false;
+          _connectionStateController.add(false);
+          // print('FTMS device disconnected, attempting to reconnect...');
+          _attemptReconnect();
+        }
+      });
+      
+      _isConnected = true;
+      _connectionStateController.add(true);
+
+      return true;
     } catch (e) {
-      print('Error connecting to device: $e');
+      // print('Error connecting to device: $e');
+      await disconnect();
+      
+      // Trigger auto-reconnect for initial connection failures
+      if (!_isReconnecting) {
+        _attemptReconnect();
+      }
+      
       return false;
     }
   }
 
   /// Disconnect from device
   Future<void> disconnect() async {
+    _isReconnecting = false; // Stop any reconnection attempts
+    _isConnected = false;
+    _connectionStateController.add(false);
+    await _connectionStateSubscription?.cancel();
+    _connectionStateSubscription = null;
     await _dataSubscription?.cancel();
     _dataSubscription = null;
     await _connectedDevice?.disconnect();
     _connectedDevice = null;
+  }
+  
+  /// Attempt to reconnect to device
+  Future<void> _attemptReconnect() async {
+    if (_isReconnecting) return;
+    _isReconnecting = true;
+    
+    // Wait a bit before reconnecting
+    await Future.delayed(const Duration(seconds: 2));
+    
+    if (!_isReconnecting) return; // Cancelled during wait
+    
+    final success = await connect();
+    if (success) {
+      // print('Successfully reconnected to FTMS device');
+      _isReconnecting = false;
+    } else {
+      // print('Reconnection failed, will retry...');
+      _isReconnecting = false;
+      // Will trigger again via connection state listener
+    }
   }
 
   @override
@@ -114,12 +358,41 @@ class FTMSService extends VirtualFitnessDevice {
   @override
   Future<bool> sendControlCommand(ControlCommand command) async {
     try {
-      if (_connectedDevice == null) return false;
+      if (_controlCharacteristic == null) {
+        // print('Control characteristic not available');
+        return false;
+      }
+      
+      if (!_isConnected) {
+        // print('Device not connected, cannot send control command');
+        return false;
+      }
 
-      // TODO: Implement control point writes
-      // This would send resistance/incline commands to the device
+      // Build command packet based on command type
+      List<int> packet;
+      switch (command) {
+        case SetResistance(level: final level):
+          // Opcode 0x04: Set Target Resistance Level
+          final resistanceValue = (level * 10).toInt(); // Resolution 0.1
+          packet = [
+            0x04,
+            resistanceValue & 0xFF,
+            (resistanceValue >> 8) & 0xFF,
+          ];
+          print('Sending resistance command: ${level.toInt()} (range: $_minResistance-$_maxResistance, raw value: $resistanceValue)');
+        case SetIncline(percentage: final percentage):
+          // Opcode 0x06: Set Target Inclination
+          final inclineValue = (percentage * 10).round(); // Resolution 0.1%
+          packet = [
+            0x06,
+            inclineValue & 0xFF,
+            (inclineValue >> 8) & 0xFF,
+          ];
+          print('Sending incline command: ${percentage.toStringAsFixed(1)}% (raw value: $inclineValue)');
+      }
 
-      return false; // Stub return
+      await _controlCharacteristic!.write(packet, withoutResponse: false);
+      return true;
     } catch (e) {
       print('Error sending control command: $e');
       return false;
@@ -238,5 +511,6 @@ class FTMSService extends VirtualFitnessDevice {
   void dispose() {
     disconnect();
     _dataController.close();
+    _connectionStateController.close();
   }
 }

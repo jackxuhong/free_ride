@@ -8,6 +8,7 @@ import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
+import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -56,10 +57,12 @@ class RideProvider with ChangeNotifier {
   List<double> _cadenceSamples = [];
   List<double> _heartRateSamples = [];
   double _workoutIntensity = 1.0;
+  StreamSubscription? _deviceConnectionSubscription;
   
   // Real-time calories tracking
   double _currentCalories = 0.0;
   double _totalElevationGained = 0.0;
+  double _cachedBodyWeight = 70.0; // Cached from profile, default 70kg
 
   // Summary caching
   RideSummary? _lastSummary;
@@ -89,11 +92,15 @@ class RideProvider with ChangeNotifier {
   double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
-  void initializeRide(SavedRoute route, {Uint8List? thumbnail}) {
+  void initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
     _resetMetrics();
+    
+    // Load user profile weight for calorie calculations
+    final profile = await ProfileService().getProfile();
+    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -107,15 +114,39 @@ class RideProvider with ChangeNotifier {
     SavedRoute route,
     VirtualFitnessDevice device, {
     Uint8List? thumbnail,
-  }) {
+  }) async {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
     _resetMetrics();
     
+    // Load user profile weight for calorie calculations
+    final profile = await ProfileService().getProfile();
+    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
+    
     // Set device and intensity AFTER reset
     _activeDevice = device;
     _workoutIntensity = 1.0;
+    
+    // Connect to device if it's a real FTMS device
+    if (device is FTMSService) {
+      final connected = await device.connect();
+      // Don't show error - auto-reconnect will handle connection issues
+      // if (!connected) {
+      //   print('Failed to connect to FTMS device');
+      // }
+      
+      // Listen to connection state for auto-pause/resume
+      _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
+        if (!isConnected && _status == RideStatus.running) {
+          // Auto-pause when device disconnects during ride
+          pauseRide();
+        } else if (isConnected && _status == RideStatus.paused) {
+          // Auto-resume when device reconnects (only if paused by disconnect)
+          resumeRide();
+        }
+      });
+    }
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -186,6 +217,11 @@ class RideProvider with ChangeNotifier {
     _status = RideStatus.cancelled;
     _endTime = DateTime.now();
     _simulationTimer?.cancel();
+    
+    // Disconnect device if it's a real FTMS device
+    if (_activeDevice is FTMSService) {
+      await (_activeDevice as FTMSService).disconnect();
+    }
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
@@ -318,13 +354,9 @@ class RideProvider with ChangeNotifier {
         intensityMultiplier: _workoutIntensity,
       );
 
-      // Use device-provided speed or fall back to calculated speed
-      _currentSpeed = deviceData.speed ?? RideCalculator.calculateAdjustedSpeed(
-        baseSpeed: AppConstants.baseSpeedKmh,
-        grade: _currentGrade,
-        speedMultiplier: AppConstants.speedMultiplier,
-        gradeAdjustmentFactor: AppConstants.gradeAdjustmentFactor,
-      );
+      // For real devices (FTMS), use device speed directly, don't calculate
+      // For virtual devices, speed should always be available from simulate()
+      _currentSpeed = deviceData.speed ?? 0.0;
 
       // Update device-specific metrics
       if (deviceData.cadenceOrPace != null) {
@@ -336,17 +368,28 @@ class RideProvider with ChangeNotifier {
         _heartRateSamples.add(_currentHeartRate);
       }
 
-      // Send control commands to device based on grade
+      // Send control commands to device based on route grade and intensity
       final deviceType = _activeDevice.runtimeType.toString();
       
       if (deviceType.contains('Bike')) {
-        // Map grade to resistance (1-20)
-        final resistance = (_currentGrade / 0.008 + 10).clamp(1, 20).round();
-        _activeDevice!.sendControlCommand(SetResistance(resistance));
+        // Map grade percentage to resistance and apply intensity multiplier
+        // Grade is stored as decimal (0.05 = 5%), convert to percentage first
+        final gradePercent = _currentGrade * 100;
+        // Get device resistance range (default 1-20 if not FTMS)
+        final minRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).minResistance.toDouble() : 1.0;
+        final maxRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).maxResistance.toDouble() : 20.0;
+        // Map -5% to 15% grade range to device resistance range
+        // 0% = 25% of range, scaling factor based on range
+        final rangeSize = maxRes - minRes;
+        final baseResistance = (gradePercent * (rangeSize / 20.0) + minRes + (rangeSize * 0.25)).clamp(minRes, maxRes);
+        final adjustedResistance = (baseResistance * _workoutIntensity).clamp(minRes, maxRes).round();
+        print('Grade: ${gradePercent.toStringAsFixed(1)}%, Resistance: $adjustedResistance (range: ${minRes.toInt()}-${maxRes.toInt()})');
+        _activeDevice!.sendControlCommand(SetResistance(adjustedResistance));
       } else {
-        // Map grade to incline percentage
-        final incline = (_currentGrade * 100).clamp(-3.0, 15.0);
-        _activeDevice!.sendControlCommand(SetIncline(incline));
+        // Map grade to incline percentage and apply intensity multiplier
+        final baseIncline = (_currentGrade * 100).clamp(-3.0, 15.0);
+        final adjustedIncline = (baseIncline * _workoutIntensity).clamp(-3.0, 15.0);
+        _activeDevice!.sendControlCommand(SetIncline(adjustedIncline));
       }
 
       // Use device power if available
@@ -465,8 +508,7 @@ class RideProvider with ChangeNotifier {
     }
     _currentElevation = newElevation;
     
-    // Update real-time calories
-    final bodyWeight = 70.0; // Default weight, can be updated from profile
+    // Update real-time calories using cached body weight
     final avgSpeed = _completedDistance > 0 && _movingTime.inSeconds > 0
         ? (_completedDistance / _movingTime.inSeconds) * 3.6
         : 0.0;
@@ -480,7 +522,7 @@ class RideProvider with ChangeNotifier {
     }
     met += (_totalElevationGained / 100) * 0.5;
     final hours = _movingTime.inSeconds / 3600.0;
-    _currentCalories = met * bodyWeight * hours;
+    _currentCalories = met * _cachedBodyWeight * hours;
   }
 
   /// Generate ride summary
