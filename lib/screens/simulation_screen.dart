@@ -3,9 +3,11 @@ import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
+import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
+import 'package:free_ride/widgets/device_connection_widget.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -43,6 +45,68 @@ class _SimulationScreenState extends State<SimulationScreen> {
     setState(() {
       _autoFollow = true;
     });
+  }
+
+  void _showIntensityControl(BuildContext context, RideProvider rideProvider) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Container(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Workout Intensity',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Slider(
+                    value: rideProvider.workoutIntensity,
+                    min: 0.5,
+                    max: 2.0,
+                    divisions: 15,
+                    label: '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                    onChanged: (value) {
+                      setState(() {
+                        rideProvider.setWorkoutIntensity(value);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('0.5× (Easy)', style: TextStyle(color: Colors.grey[600])),
+                      Text('2.0× (Hard)', style: TextStyle(color: Colors.grey[600])),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<bool> _showCancelDialog() async {
@@ -141,6 +205,16 @@ class _SimulationScreenState extends State<SimulationScreen> {
       appBar: AppBar(
         title: Text(route.displayName),
         actions: [
+          // Device connection badge
+          if (rideProvider.activeDevice != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: DeviceConnectionWidget(
+                  device: context.read<DeviceProvider>().selectedDevice!,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.close, color: Colors.red),
             onPressed: _cancelRide,
@@ -240,6 +314,18 @@ class _SimulationScreenState extends State<SimulationScreen> {
                           _isNavigationMode ? Icons.navigation : Icons.navigation_outlined,
                         ),
                       ),
+                      // Intensity control (for device rides)
+                      if (rideProvider.activeDevice != null) ...[
+                        const SizedBox(height: 8),
+                        FloatingActionButton(
+                          heroTag: 'intensity',
+                          mini: true,
+                          onPressed: () => _showIntensityControl(context, rideProvider),
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          child: const Icon(Icons.fitness_center),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       // Play/pause button
                       _buildPlayPauseButton(rideProvider),
@@ -299,6 +385,35 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       ),
                     ],
                   ),
+                  // Show device metrics if available
+                  if (rideProvider.currentCadence > 0 || rideProvider.currentHeartRate > 0) ...[
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        if (rideProvider.currentCadence > 0)
+                          _MetricCard(
+                            label: 'Cadence',
+                            value: '${rideProvider.currentCadence.toStringAsFixed(0)} rpm',
+                            icon: Icons.rotate_right,
+                          ),
+                        if (rideProvider.currentHeartRate > 0)
+                          _MetricCard(
+                            label: 'Heart Rate',
+                            value: '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm',
+                            icon: Icons.favorite,
+                            color: Colors.red,
+                          ),
+                        if (rideProvider.activeDevice != null)
+                          _MetricCard(
+                            label: 'Intensity',
+                            value: '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                            icon: Icons.fitness_center,
+                            color: Colors.orange,
+                          ),
+                      ],
+                    ),
+                  ],
                   const Spacer(),
                   // Elevation chart
                   ElevationChart(
@@ -363,11 +478,13 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color? color;
 
   const _MetricCard({
     required this.label,
     required this.value,
     required this.icon,
+    this.color,
   });
 
   @override
@@ -375,7 +492,7 @@ class _MetricCard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 24, color: Theme.of(context).primaryColor),
+        Icon(icon, size: 24, color: color ?? Theme.of(context).primaryColor),
         const SizedBox(height: 4),
         Text(
           label,

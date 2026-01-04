@@ -7,6 +7,7 @@ import 'package:free_ride/models/ride_summary.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
+import 'package:free_ride/services/virtual_device_interface.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -48,6 +49,14 @@ class RideProvider with ChangeNotifier {
   // Power tracking
   List<PowerSample> _powerSamples = [];
 
+  // Device tracking
+  VirtualFitnessDevice? _activeDevice;
+  double _currentCadence = 0.0;
+  double _currentHeartRate = 0.0;
+  List<double> _cadenceSamples = [];
+  List<double> _heartRateSamples = [];
+  double _workoutIntensity = 1.0;
+
   // Summary caching
   RideSummary? _lastSummary;
   Uint8List? _routeThumbnail;
@@ -69,6 +78,10 @@ class RideProvider with ChangeNotifier {
   Duration get totalDuration => _totalDuration;
   Duration get movingTime => _movingTime;
   DateTime? get startTime => _startTime;
+  double get currentCadence => _currentCadence;
+  double get currentHeartRate => _currentHeartRate;
+  double get workoutIntensity => _workoutIntensity;
+  VirtualFitnessDevice? get activeDevice => _activeDevice;
 
   /// Initialize ride with a route
   void initializeRide(SavedRoute route, {Uint8List? thumbnail}) {
@@ -81,6 +94,37 @@ class RideProvider with ChangeNotifier {
     _currentPosition = route.coordinates.start;
     _currentElevation = route.elevationProfile.elevations.first;
     
+    notifyListeners();
+  }
+
+  /// Initialize ride with a device (new method for device integration)
+  void startRideWithDevice(
+    SavedRoute route,
+    VirtualFitnessDevice device, {
+    Uint8List? thumbnail,
+  }) {
+    _route = route;
+    _status = RideStatus.notStarted;
+    _routeThumbnail = thumbnail;
+    _resetMetrics();
+    
+    // Set device and intensity AFTER reset
+    _activeDevice = device;
+    _workoutIntensity = 1.0;
+    
+    // Set initial position
+    _currentPosition = route.coordinates.start;
+    _currentElevation = route.elevationProfile.elevations.first;
+    
+    // Start the ride automatically
+    startRide();
+    
+    notifyListeners();
+  }
+
+  /// Set workout intensity multiplier (0.5 to 2.0)
+  void setWorkoutIntensity(double intensity) {
+    _workoutIntensity = intensity.clamp(0.5, 2.0);
     notifyListeners();
   }
 
@@ -260,13 +304,69 @@ class RideProvider with ChangeNotifier {
       _currentGrade = _route!.elevationProfile.grades[_currentSegmentIndex];
     }
 
-    // Calculate speed with grade adjustment
-    _currentSpeed = RideCalculator.calculateAdjustedSpeed(
-      baseSpeed: AppConstants.baseSpeedKmh,
-      grade: _currentGrade,
-      speedMultiplier: AppConstants.speedMultiplier,
-      gradeAdjustmentFactor: AppConstants.gradeAdjustmentFactor,
-    );
+    // If we have an active device, use it for metrics
+    if (_activeDevice != null) {
+      // Simulate device with current conditions
+      final deviceData = _activeDevice!.simulate(
+        deltaTime: deltaTime,
+        routeGrade: _currentGrade,
+        intensityMultiplier: _workoutIntensity,
+      );
+
+      // Use device-provided speed or fall back to calculated speed
+      _currentSpeed = deviceData.speed ?? RideCalculator.calculateAdjustedSpeed(
+        baseSpeed: AppConstants.baseSpeedKmh,
+        grade: _currentGrade,
+        speedMultiplier: AppConstants.speedMultiplier,
+        gradeAdjustmentFactor: AppConstants.gradeAdjustmentFactor,
+      );
+
+      // Update device-specific metrics
+      if (deviceData.cadenceOrPace != null) {
+        _currentCadence = deviceData.cadenceOrPace!;
+        _cadenceSamples.add(_currentCadence);
+      }
+      if (deviceData.heartRate != null) {
+        _currentHeartRate = deviceData.heartRate!.toDouble();
+        _heartRateSamples.add(_currentHeartRate);
+      }
+
+      // Send control commands to device based on grade
+      final deviceType = _activeDevice.runtimeType.toString();
+      
+      if (deviceType.contains('Bike')) {
+        // Map grade to resistance (1-20)
+        final resistance = (_currentGrade / 0.008 + 10).clamp(1, 20).round();
+        _activeDevice!.sendControlCommand(SetResistance(resistance));
+      } else {
+        // Map grade to incline percentage
+        final incline = (_currentGrade * 100).clamp(-3.0, 15.0);
+        _activeDevice!.sendControlCommand(SetIncline(incline));
+      }
+
+      // Use device power if available
+      if (deviceData.power != null) {
+        _powerSamples.add(PowerSample(
+          power: deviceData.power!,
+          timestamp: DateTime.now(),
+        ));
+      }
+    } else {
+      // No device - use calculated speed
+      _currentSpeed = RideCalculator.calculateAdjustedSpeed(
+        baseSpeed: AppConstants.baseSpeedKmh,
+        grade: _currentGrade,
+        speedMultiplier: AppConstants.speedMultiplier,
+        gradeAdjustmentFactor: AppConstants.gradeAdjustmentFactor,
+      );
+
+      // Calculate power for non-device rides
+      final power = RideCalculator.estimatePower(
+        speedKmh: _currentSpeed,
+        grade: _currentGrade,
+      );
+      _powerSamples.add(PowerSample(power: power, timestamp: DateTime.now()));
+    }
 
     // Track speed statistics
     if (_currentSpeed > _maxSpeed) _maxSpeed = _currentSpeed;
@@ -278,13 +378,6 @@ class RideProvider with ChangeNotifier {
     // Track grade statistics
     if (_currentGrade > _maxGrade) _maxGrade = _currentGrade;
     if (_currentGrade < _minGrade) _minGrade = _currentGrade;
-
-    // Calculate power
-    final power = RideCalculator.estimatePower(
-      speedKmh: _currentSpeed,
-      grade: _currentGrade,
-    );
-    _powerSamples.add(PowerSample(power: power, timestamp: DateTime.now()));
 
     // Calculate distance moved in this tick
     final speedMs = _currentSpeed / 3.6;
@@ -455,6 +548,12 @@ class RideProvider with ChangeNotifier {
     _maxGrade = double.negativeInfinity;
     _minGrade = double.infinity;
     _powerSamples = [];
+    _currentCadence = 0.0;
+    _currentHeartRate = 0.0;
+    _cadenceSamples = [];
+    _heartRateSamples = [];
+    _workoutIntensity = 1.0;
+    _activeDevice = null;
   }
 
   @override
