@@ -321,33 +321,26 @@ class _RideHistoryCard extends StatelessWidget {
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
-        subtitle: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        subtitle: Wrap(
+          spacing: 16,
+          runSpacing: 4,
           children: [
-            const SizedBox(height: 4),
             Text(dateFormat.format(summary.startTime)),
-            const SizedBox(height: 4),
-            Wrap(
-              spacing: 16,
-              runSpacing: 4,
-              children: [
-                _SmallMetric(
-                  icon: Icons.straighten,
-                  value: summary.formattedDistance,
-                ),
-                _SmallMetric(
-                  icon: Icons.timer,
-                  value: summary.formattedDuration,
-                ),
-                _SmallMetric(
-                  icon: Icons.speed,
-                  value: summary.formattedAverageSpeed,
-                ),
-                _SmallMetric(
-                  icon: Icons.local_fire_department,
-                  value: '${summary.caloriesBurned} kcal',
-                ),
-              ],
+            _SmallMetric(
+              icon: Icons.straighten,
+              value: summary.formattedDistance,
+            ),
+            _SmallMetric(
+              icon: Icons.timer,
+              value: summary.formattedDuration,
+            ),
+            _SmallMetric(
+              icon: Icons.speed,
+              value: summary.formattedAverageSpeed,
+            ),
+            _SmallMetric(
+              icon: Icons.local_fire_department,
+              value: '${summary.caloriesBurned} kcal',
             ),
           ],
         ),
