@@ -334,12 +334,13 @@ class _SimulationScreenState extends State<SimulationScreen> {
           ),
           // Stats panel - fixed height, scales width only
           Container(
-            height: 220,
-            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+            height: 335,
+            padding: const EdgeInsets.all(16.0),
             child: Column(
               children: [
                 // Speed, elevation, grade
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     Expanded(
                       child: _MetricCard(
@@ -364,9 +365,10 @@ class _SimulationScreenState extends State<SimulationScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 // Distance and time
                 Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     Expanded(
                       child: _MetricCard(
@@ -393,8 +395,9 @@ class _SimulationScreenState extends State<SimulationScreen> {
                 ),
                 // Show device metrics if available
                 if (rideProvider.currentHeartRate > 0 || rideProvider.activeDevice != null) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
                     children: [
                       Expanded(
                         child: _MetricCard(
@@ -434,11 +437,11 @@ class _SimulationScreenState extends State<SimulationScreen> {
                     currentProgress: rideProvider.completionPercentage / 100,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 4),
                 // Progress bar - fixed height
                 LinearProgressIndicator(
                   value: rideProvider.completionPercentage / 100,
-                  minHeight: 5,
+                  minHeight: 6,
                 ),
               ],
             ),
@@ -502,37 +505,22 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 4.0),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 18,
-            child: Icon(icon, size: 18, color: color ?? Theme.of(context).primaryColor),
-          ),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
-                ),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                      ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 24, color: color ?? Theme.of(context).primaryColor),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+        ),
+      ],
     );
   }
 }
