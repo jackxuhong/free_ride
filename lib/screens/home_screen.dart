@@ -16,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final _profileService = ProfileService();
   bool _isLoading = true;
+  final GlobalKey<HistoryScreenRefreshState> _historyKey = GlobalKey();
 
   @override
   void initState() {
@@ -41,7 +42,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> get _screens => [
         const InputScreen(),
-        const HistoryScreen(),
+        HistoryScreenRefresh(key: _historyKey),
         const DeviceSetupScreen(),
         ProfileScreen(onProfileSaved: _onProfileSaved),
       ];
@@ -65,6 +66,10 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _currentIndex = index;
           });
+          // Refresh history when tapping the History tab
+          if (index == 1) {
+            _historyKey.currentState?.refresh();
+          }
         },
         type: BottomNavigationBarType.fixed,
         selectedItemColor: Colors.blue,

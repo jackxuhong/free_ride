@@ -7,7 +7,7 @@ import 'package:free_ride/services/heart_rate_simulator.dart';
 
 /// Virtual indoor bike simulator
 class VirtualIndoorBike extends VirtualFitnessDevice {
-  double _effortLevel = 50.0; // 0-100%
+  double _targetSpeed = 25.0; // Target speed in km/h
   double _resistanceLevel = 10.0; // 1-20
   double _currentSpeed = 0.0;
   double _currentPower = 0.0;
@@ -16,10 +16,10 @@ class VirtualIndoorBike extends VirtualFitnessDevice {
   final HeartRateSimulator _hrSimulator;
 
   VirtualIndoorBike({
-    double effortLevel = 50.0,
+    double targetSpeed = 25.0,
     double resistanceLevel = 10.0,
     HeartRateSimulator? hrSimulator,
-  })  : _effortLevel = effortLevel,
+  })  : _targetSpeed = targetSpeed,
         _resistanceLevel = resistanceLevel,
         _hrSimulator = hrSimulator ?? HeartRateSimulator();
 
@@ -31,8 +31,8 @@ class VirtualIndoorBike extends VirtualFitnessDevice {
     required double effortLevel,
     required double controllableParam,
   }) {
-    _effortLevel = effortLevel.clamp(0, 100);
-    _resistanceLevel = controllableParam.clamp(1, 20);
+    // effortLevel is now target speed (km/h)
+    _targetSpeed = effortLevel.clamp(0, 200);
   }
 
   @override
@@ -42,27 +42,32 @@ class VirtualIndoorBike extends VirtualFitnessDevice {
     required double intensityMultiplier,
   }) {
     // If following a route, adjust resistance based on grade
+    double baseResistance = _resistanceLevel;
     if (routeGrade != null) {
       // Map grade to resistance: grade/0.8 + 10
       // -7.2% → resistance 1, 0% → resistance 10, 8% → resistance 20
-      final targetResistance = (routeGrade / 0.8 + 10).clamp(1.0, 20.0);
-      _resistanceLevel = targetResistance;
+      baseResistance = (routeGrade / 0.8 + 10).clamp(1.0, 20.0);
     }
 
-    // Calculate speed with intensity multiplier
-    _currentSpeed = _calculateSpeed(_effortLevel, _resistanceLevel, intensityMultiplier);
+    // Apply intensity multiplier to resistance (makes workout harder/easier)
+    final effectiveResistance = (baseResistance * intensityMultiplier).clamp(1.0, 20.0);
 
-    // Calculate power with intensity multiplier
-    _currentPower = _calculatePower(_effortLevel, _resistanceLevel, intensityMultiplier);
+    // Use target speed as current speed (user controls speed directly)
+    _currentSpeed = _targetSpeed;
 
-    // Calculate cadence (not affected by intensity, it's a mechanical output)
-    _currentCadence = _calculateCadence(_effortLevel, _resistanceLevel);
+    // Calculate power based on speed and effective resistance
+    _currentPower = _calculatePowerFromSpeed(_targetSpeed, effectiveResistance);
 
-    // Update heart rate with intensity
+    // Calculate cadence based on speed and resistance
+    _currentCadence = _calculateCadenceFromSpeed(_targetSpeed, effectiveResistance);
+
+    // Calculate effort level for HR from speed and resistance
+    final effortFromSpeed = (_targetSpeed / 40.0 * 100).clamp(0.0, 100.0); // 40 km/h = 100% effort
+    final effectiveEffort = (effortFromSpeed * (1.0 + (effectiveResistance - 10) / 20)).clamp(0.0, 100.0);
     final hr = _hrSimulator.updateHeartRate(
-      effortLevel: _effortLevel,
+      effortLevel: effectiveEffort,
       deltaTime: deltaTime,
-      intensityMultiplier: intensityMultiplier,
+      intensityMultiplier: 1.0,
     );
 
     return DeviceDataSnapshot(
@@ -70,43 +75,29 @@ class VirtualIndoorBike extends VirtualFitnessDevice {
       power: _currentPower,
       cadenceOrPace: _currentCadence,
       heartRate: hr.round(),
-      controllableParam: _resistanceLevel,
+      controllableParam: effectiveResistance,
     );
   }
 
-  /// Calculate speed from effort and resistance with intensity
-  /// Formula: speed = 20 × (0.3 + effort/100 × 1.7) × (1.0 - (resistance-10) × 0.04) × intensity
-  double _calculateSpeed(double effort, double resistance, double intensity) {
-    const baseSpeed = 20.0; // km/h
-    final effortMultiplier = 0.3 + (effort / 100.0) * 1.7;
-    final resistanceMultiplier = 1.0 - (resistance - 10.0) * 0.04;
-    return baseSpeed * effortMultiplier * resistanceMultiplier * intensity;
+  /// Calculate power from speed and resistance
+  /// Power increases with both speed and resistance
+  double _calculatePowerFromSpeed(double speedKmh, double resistance) {
+    // Base power proportional to speed
+    final speedFactor = speedKmh / 25.0; // Normalized to 25 km/h
+    // Resistance multiplier (resistance 10 = 1.0×, 20 = 2.35×)
+    final resistanceFactor = 1.0 + (resistance - 1) * 0.15;
+    final basePower = 100 * speedFactor * resistanceFactor;
+    return min(400.0, basePower);
   }
 
-  /// Calculate power from effort and resistance with intensity
-  /// Formula: power = min(400, 50 + 250 × (effort/100)^1.2 × (1 + (resistance-1) × 0.15)) × intensity
-  double _calculatePower(double effort, double resistance, double intensity) {
-    const basePower = 50.0; // watts
-    const maxPower = 400.0; // watts (realistic for average rider)
-    
-    final effortFactor = pow(effort / 100.0, 1.2);
-    final resistanceFactor = 1.0 + (resistance - 1.0) * 0.15;
-    
-    final power = basePower + 250.0 * effortFactor * resistanceFactor;
-    return min(maxPower, power) * intensity;
-  }
-
-  /// Calculate cadence from effort and resistance
-  /// Formula: cadence = clamp(40 × (1 + effort/100 × 1.5) × (1 - (resistance-1) × 0.015), 0, 120)
-  double _calculateCadence(double effort, double resistance) {
-    const baseCadence = 40.0; // RPM
-    const maxCadence = 120.0; // RPM
-    
-    final effortFactor = 1.0 + (effort / 100.0) * 1.5;
-    final resistancePenalty = 1.0 - (resistance - 1.0) * 0.015;
-    
-    final cadence = baseCadence * effortFactor * resistancePenalty;
-    return cadence.clamp(0, maxCadence);
+  /// Calculate cadence from speed and resistance
+  /// Higher speed = higher cadence, higher resistance = lower cadence
+  double _calculateCadenceFromSpeed(double speedKmh, double resistance) {
+    // Base cadence from speed: 25 km/h ≈ 80 RPM
+    final baseCadence = (speedKmh / 25.0) * 80.0;
+    // Resistance reduces cadence slightly (harder to pedal fast)
+    final resistanceFactor = 1.0 - (resistance - 1) * 0.015;
+    return (baseCadence * resistanceFactor).clamp(0, 120);
   }
 
   @override

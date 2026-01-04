@@ -51,16 +51,20 @@ class VirtualTreadmill extends VirtualFitnessDevice {
     required double intensityMultiplier,
   }) {
     // If following a route, set target incline to match grade
+    double baseIncline = _targetIncline;
     if (routeGrade != null) {
       // Convert grade (decimal) to incline percentage
-      _targetIncline = (routeGrade * 100).clamp(-3.0, 15.0);
+      baseIncline = (routeGrade * 100).clamp(-3.0, 15.0);
     }
+
+    // Apply intensity multiplier to incline (not to output metrics)
+    _targetIncline = (baseIncline * intensityMultiplier).clamp(-3.0, 15.0);
 
     // Smooth incline changes (rate limiting: 2% per second max)
     _currentIncline = _smoothIncline(_currentIncline, _targetIncline, deltaTime);
 
-    // Calculate power with intensity multiplier (convert incline back to decimal grade)
-    final power = _calculateRunningPower(_userSpeed, _currentIncline / 100, intensityMultiplier);
+    // Calculate power with intensity-modified incline (convert incline back to decimal grade)
+    final power = _calculateRunningPower(_userSpeed, _currentIncline / 100, 1.0);
 
     // Calculate pace (min/km)
     final pace = _userSpeed > 0 ? 60.0 / _userSpeed : 0.0;
@@ -68,11 +72,11 @@ class VirtualTreadmill extends VirtualFitnessDevice {
     // Estimate effort from speed and incline for HR calculation
     final estimatedEffort = _estimateEffortFromSpeed(_userSpeed, _currentIncline);
 
-    // Update heart rate with intensity
+    // Update heart rate based on effort (higher incline = more effort)
     final hr = _hrSimulator.updateHeartRate(
       effortLevel: estimatedEffort,
       deltaTime: deltaTime,
-      intensityMultiplier: intensityMultiplier,
+      intensityMultiplier: 1.0,
     );
 
     return DeviceDataSnapshot(

@@ -57,13 +57,11 @@ class DeviceProvider extends ChangeNotifier {
       // Create virtual device
       if (device.deviceType == DeviceType.indoorBike) {
         return VirtualIndoorBike(
-          effortLevel: device.effortLevel,
-          resistanceLevel: device.controllableParam,
+          targetSpeed: device.effortLevel,
         );
       } else {
         return VirtualTreadmill(
           userSpeed: device.effortLevel,
-          initialIncline: device.controllableParam,
         );
       }
     } else {

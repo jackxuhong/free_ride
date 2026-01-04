@@ -49,8 +49,8 @@ class DeviceStorageService {
       name: 'Virtual Bike',
       deviceType: DeviceType.indoorBike,
       isVirtual: true,
-      effortLevel: 50.0, // 50% effort
-      controllableParam: 10.0, // Resistance level 10
+      effortLevel: 25.0, // 25 km/h speed
+      controllableParam: 0.0, // Unused (route controls resistance)
     );
 
     // Virtual Treadmill
@@ -60,7 +60,7 @@ class DeviceStorageService {
       deviceType: DeviceType.treadmill,
       isVirtual: true,
       effortLevel: 10.0, // 10 km/h speed
-      controllableParam: 0.0, // 0% incline
+      controllableParam: 0.0, // Unused (route controls incline)
     );
 
     await _devicesBox.put(virtualBike.id, virtualBike);

@@ -16,22 +16,19 @@ class VirtualDeviceController extends StatefulWidget {
 }
 
 class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
-  late double _effortLevel;
-  late double _controllableParam;
+  late double _speed;
 
   @override
   void initState() {
     super.initState();
-    _effortLevel = widget.device.effortLevel;
-    _controllableParam = widget.device.controllableParam;
+    _speed = widget.device.effortLevel;
   }
 
   Future<void> _updateParameters() async {
     final deviceProvider = context.read<DeviceProvider>();
     await deviceProvider.updateDeviceParameters(
       deviceId: widget.device.id,
-      effortLevel: _effortLevel,
-      controllableParam: _controllableParam,
+      effortLevel: _speed,
     );
   }
 
@@ -53,45 +50,19 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
             ),
             const SizedBox(height: 16),
             
-            // Effort Level Slider
+            // Speed Slider (for both devices)
             Text(
-              isBike 
-                  ? 'Effort Level: ${_effortLevel.toStringAsFixed(0)}%'
-                  : 'Speed: ${_effortLevel.toStringAsFixed(1)} km/h',
+              'Speed: ${_speed.toStringAsFixed(1)} km/h',
               style: Theme.of(context).textTheme.bodyMedium,
             ),
             Slider(
-              value: _effortLevel,
+              value: _speed,
               min: 0,
-              max: isBike ? 100 : 25,
-              divisions: isBike ? 100 : 250,
-              label: isBike 
-                  ? '${_effortLevel.toStringAsFixed(0)}%'
-                  : '${_effortLevel.toStringAsFixed(1)} km/h',
+              max: 200,
+              divisions: 2000,
+              label: '${_speed.toStringAsFixed(1)} km/h',
               onChanged: (value) {
-                setState(() => _effortLevel = value);
-              },
-              onChangeEnd: (value) => _updateParameters(),
-            ),
-            const SizedBox(height: 16),
-            
-            // Controllable Parameter Slider
-            Text(
-              isBike
-                  ? 'Resistance: ${_controllableParam.toStringAsFixed(0)}'
-                  : 'Incline: ${_controllableParam.toStringAsFixed(1)}%',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            Slider(
-              value: _controllableParam,
-              min: isBike ? 1 : -3,
-              max: isBike ? 20 : 15,
-              divisions: isBike ? 19 : 180,
-              label: isBike
-                  ? _controllableParam.toStringAsFixed(0)
-                  : '${_controllableParam.toStringAsFixed(1)}%',
-              onChanged: (value) {
-                setState(() => _controllableParam = value);
+                setState(() => _speed = value);
               },
               onChangeEnd: (value) => _updateParameters(),
             ),
@@ -99,8 +70,8 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
             const SizedBox(height: 8),
             Text(
               isBike
-                  ? 'These controls simulate user pedaling effort and resistance level'
-                  : 'Speed is user-controlled. Incline will be auto-adjusted during rides',
+                  ? 'Resistance will be automatically controlled by route terrain'
+                  : 'Incline will be automatically controlled by route terrain',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: Colors.grey[600],
                   ),
