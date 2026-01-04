@@ -17,6 +17,57 @@ class SummaryScreen extends StatefulWidget {
 
 class _SummaryScreenState extends State<SummaryScreen> {
   final _storageService = RouteStorageService();
+  bool _showCompletedBanner = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Show completed banner once
+    if (widget.summary.completed && _showCompletedBanner) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('🎉 Ride Completed!'),
+              backgroundColor: Colors.green,
+              duration: Duration(seconds: 2),
+            ),
+          );
+          setState(() {
+            _showCompletedBanner = false;
+          });
+        }
+      });
+    }
+  }
+
+  Future<void> _deleteRide() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Ride'),
+        content: const Text('Are you sure you want to delete this ride?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      _storageService.deleteRideHistory(widget.summary);
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
+    }
+  }
 
   Future<void> _repeatRide() async {
     // Reload the route from storage and navigate to simulation screen
@@ -69,32 +120,6 @@ class _SummaryScreenState extends State<SummaryScreen> {
               const SizedBox(height: 16),
             ],
             
-            // Status banner
-            Card(
-              color: widget.summary.completed ? Colors.green.shade50 : Colors.orange.shade50,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      widget.summary.completed ? Icons.check_circle : Icons.cancel,
-                      color: widget.summary.completed ? Colors.green : Colors.orange,
-                      size: 32,
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      widget.summary.completed ? 'Ride Completed! 🎉' : 'Ride Cancelled',
-                      style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                            fontWeight: FontWeight.bold,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-
             // Action buttons
             Row(
               children: [
@@ -113,6 +138,17 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       foregroundColor: Colors.white,
                     ),
                     child: const Text('Repeat Ride'),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: _deleteRide,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      side: const BorderSide(color: Colors.red),
+                    ),
+                    child: const Text('Delete'),
                   ),
                 ),
               ],
@@ -141,142 +177,37 @@ class _SummaryScreenState extends State<SummaryScreen> {
             ),
             const SizedBox(height: 16),
 
-            // Time metrics
-            _SectionTitle('Time'),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Total Duration',
-                    value: widget.summary.formattedDuration,
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Moving Time',
-                    value: _formatDuration(widget.summary.movingTime),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Distance metrics
-            _SectionTitle('Distance'),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Completed',
-                    value: widget.summary.formattedDistance,
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Progress',
-                    value: '${widget.summary.completionPercentage.toStringAsFixed(0)}%',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Speed metrics
-            _SectionTitle('Speed'),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Average',
-                    value: widget.summary.formattedAverageSpeed,
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Max Speed',
-                    value: '${widget.summary.maxSpeed.toStringAsFixed(1)} km/h',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Elevation metrics
-            _SectionTitle('Elevation'),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Gain',
-                    value: '${widget.summary.totalElevationGain.toStringAsFixed(0)} m',
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Loss',
-                    value: '${widget.summary.totalElevationLoss.toStringAsFixed(0)} m',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Max Grade',
-                    value: '${widget.summary.maxGrade.toStringAsFixed(1)}%',
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Min Grade',
-                    value: '${widget.summary.minGrade.toStringAsFixed(1)}%',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-
-            // Performance metrics
-            _SectionTitle('Performance'),
-            Row(
-              children: [
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Calories',
-                    value: '${widget.summary.caloriesBurned} kcal',
-                  ),
-                ),
-                Expanded(
-                  child: _MetricCard(
-                    label: 'Avg Power',
-                    value: '${widget.summary.averagePower.toStringAsFixed(0)} W',
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Info banner
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.green.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.green.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.check_circle, color: Colors.green, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Ride automatically saved to history',
-                      style: TextStyle(color: Colors.green.shade700),
+            // All metrics in compact grid
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(child: _CompactMetric(label: 'Distance', value: widget.summary.formattedDistance)),
+                        Expanded(child: _CompactMetric(label: 'Duration', value: widget.summary.formattedDuration)),
+                        Expanded(child: _CompactMetric(label: 'Progress', value: '${widget.summary.completionPercentage.toStringAsFixed(0)}%')),
+                      ],
                     ),
-                  ),
-                ],
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _CompactMetric(label: 'Avg Speed', value: widget.summary.formattedAverageSpeed)),
+                        Expanded(child: _CompactMetric(label: 'Max Speed', value: '${widget.summary.maxSpeed.toStringAsFixed(1)} km/h')),
+                        Expanded(child: _CompactMetric(label: 'Calories', value: '${widget.summary.caloriesBurned} kcal')),
+                      ],
+                    ),
+                    const Divider(height: 16),
+                    Row(
+                      children: [
+                        Expanded(child: _CompactMetric(label: 'Elev Gain', value: '${widget.summary.totalElevationGain.toStringAsFixed(0)} m')),
+                        Expanded(child: _CompactMetric(label: 'Elev Loss', value: '${widget.summary.totalElevationLoss.toStringAsFixed(0)} m')),
+                        Expanded(child: _CompactMetric(label: 'Avg Power', value: '${widget.summary.averagePower.toStringAsFixed(0)} W')),
+                      ],
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
@@ -319,37 +250,36 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _MetricCard extends StatelessWidget {
+class _CompactMetric extends StatelessWidget {
   final String label;
   final String value;
 
-  const _MetricCard({
+  const _CompactMetric({
     required this.label,
     required this.value,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              label,
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-            const SizedBox(height: 4),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
-            ),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Colors.grey.shade600,
+          ),
+          textAlign: TextAlign.center,
         ),
-      ),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 }
