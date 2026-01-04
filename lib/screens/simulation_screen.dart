@@ -296,7 +296,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       if (!_autoFollow)
                         FloatingActionButton(
                           heroTag: 'recenter',
-                          mini: true,
                           onPressed: _recenterMap,
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.blue,
@@ -306,7 +305,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       // Navigation mode toggle
                       FloatingActionButton(
                         heroTag: 'navigation',
-                        mini: true,
                         onPressed: _toggleNavigationMode,
                         backgroundColor: _isNavigationMode ? Colors.blue : Colors.white,
                         foregroundColor: _isNavigationMode ? Colors.white : Colors.grey,
@@ -319,7 +317,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
                         const SizedBox(height: 8),
                         FloatingActionButton(
                           heroTag: 'intensity',
-                          mini: true,
                           onPressed: () => _showIntensityControl(context, rideProvider),
                           backgroundColor: Colors.orange,
                           foregroundColor: Colors.white,
@@ -335,99 +332,115 @@ class _SimulationScreenState extends State<SimulationScreen> {
               ],
             ),
           ),
-          // Stats display
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Speed, elevation, grade
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _MetricCard(
+          // Stats panel - fixed height, scales width only
+          Container(
+            height: 220,
+            padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 6.0),
+            child: Column(
+              children: [
+                // Speed, elevation, grade
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Speed',
                         value: '${rideProvider.currentSpeed.toStringAsFixed(1)} km/h',
                         icon: Icons.speed,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Elevation',
                         value: '${rideProvider.currentElevation.toStringAsFixed(0)} m',
                         icon: Icons.terrain,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Grade',
                         value: '${rideProvider.currentGrade.toStringAsFixed(1)}%',
                         icon: Icons.trending_up,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Distance and time
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _MetricCard(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Distance and time
+                Row(
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Distance',
                         value: '${(rideProvider.completedDistance / 1000).toStringAsFixed(2)} km',
                         icon: Icons.straighten,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Time',
                         value: _formatDuration(rideProvider.totalDuration),
                         icon: Icons.timer,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Progress',
                         value: '${rideProvider.completionPercentage.toStringAsFixed(0)}%',
                         icon: Icons.flag,
                       ),
-                    ],
-                  ),
-                  // Show device metrics if available
-                  if (rideProvider.currentCadence > 0 || rideProvider.currentHeartRate > 0) ...[
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        if (rideProvider.currentCadence > 0)
-                          _MetricCard(
-                            label: 'Cadence',
-                            value: '${rideProvider.currentCadence.toStringAsFixed(0)} rpm',
-                            icon: Icons.rotate_right,
-                          ),
-                        if (rideProvider.currentHeartRate > 0)
-                          _MetricCard(
+                    ),
+                  ],
+                ),
+                // Show device metrics if available
+                if (rideProvider.currentHeartRate > 0 || rideProvider.activeDevice != null) ...[
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: _MetricCard(
+                          label: 'Calories',
+                          value: '${rideProvider.currentCalories.toStringAsFixed(0)} kcal',
+                          icon: Icons.local_fire_department,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      if (rideProvider.currentHeartRate > 0)
+                        Expanded(
+                          child: _MetricCard(
                             label: 'Heart Rate',
                             value: '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm',
                             icon: Icons.favorite,
                             color: Colors.red,
                           ),
-                        if (rideProvider.activeDevice != null)
-                          _MetricCard(
+                        ),
+                      if (rideProvider.activeDevice != null)
+                        Expanded(
+                          child: _MetricCard(
                             label: 'Intensity',
                             value: '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
                             icon: Icons.fitness_center,
-                            color: Colors.orange,
+                            color: Colors.blue,
                           ),
-                      ],
-                    ),
-                  ],
-                  const Spacer(),
-                  // Elevation chart
-                  ElevationChart(
+                        ),
+                    ],
+                  ),
+                ],
+                const Spacer(),
+                // Elevation chart - fixed height
+                SizedBox(
+                  height: 70,
+                  child: ElevationChart(
                     route: route,
                     currentProgress: rideProvider.completionPercentage / 100,
                   ),
-                  const SizedBox(height: 8),
-                  // Progress bar
-                  LinearProgressIndicator(
-                    value: rideProvider.completionPercentage / 100,
-                    minHeight: 8,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 3),
+                // Progress bar - fixed height
+                LinearProgressIndicator(
+                  value: rideProvider.completionPercentage / 100,
+                  minHeight: 5,
+                ),
+              ],
             ),
           ),
         ],
@@ -489,22 +502,37 @@ class _MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 24, color: color ?? Theme.of(context).primaryColor),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: Theme.of(context).textTheme.bodySmall,
-        ),
-        Text(
-          value,
-          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-        ),
-      ],
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 4.0),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          SizedBox(
+            width: 18,
+            child: Icon(icon, size: 18, color: color ?? Theme.of(context).primaryColor),
+          ),
+          const SizedBox(width: 6),
+          Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(fontSize: 10),
+                ),
+                Text(
+                  value,
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

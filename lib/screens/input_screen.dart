@@ -289,6 +289,69 @@ class _InputScreenState extends State<InputScreen> {
               children: [
                 const SizedBox(height: 20),
                 
+                // Device Selection Card (moved to top)
+                Consumer<DeviceProvider>(
+                  builder: (context, deviceProvider, _) {
+                    final device = deviceProvider.selectedDevice;
+                    return Card(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DeviceSetupScreen(),
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                device?.deviceType.name == 'indoorBike'
+                                    ? Icons.directions_bike
+                                    : Icons.directions_run,
+                                size: 32,
+                                color: device != null ? Colors.green : Colors.grey,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      device?.name ?? 'No device selected',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      device != null
+                                          ? (device.isVirtual ? 'Virtual Device' : 'Bluetooth Device')
+                                          : 'Tap to select a device',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: Colors.grey[400],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
+                
                 // Saved routes dropdown
                 FutureBuilder<List<SavedRoute>>(
                   future: Future.value(_storageService.getAllRoutes()),
@@ -649,69 +712,6 @@ class _InputScreenState extends State<InputScreen> {
                         },
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Device Selection Card
-                  Consumer<DeviceProvider>(
-                    builder: (context, deviceProvider, _) {
-                      final device = deviceProvider.selectedDevice;
-                      return Card(
-                        child: InkWell(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DeviceSetupScreen(),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  device?.deviceType.name == 'indoorBike'
-                                      ? Icons.directions_bike
-                                      : Icons.directions_run,
-                                  size: 32,
-                                  color: device != null ? Colors.green : Colors.grey,
-                                ),
-                                const SizedBox(width: 16),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        device?.name ?? 'No device selected',
-                                        style: const TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        device != null
-                                            ? (device.isVirtual ? 'Virtual Device' : 'Bluetooth Device')
-                                            : 'Tap to select a device',
-                                        style: TextStyle(
-                                          fontSize: 14,
-                                          color: Colors.grey[600],
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Icon(
-                                  Icons.chevron_right,
-                                  color: Colors.grey[400],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      );
-                    },
                   ),
                   const SizedBox(height: 16),
                   

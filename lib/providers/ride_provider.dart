@@ -56,6 +56,10 @@ class RideProvider with ChangeNotifier {
   List<double> _cadenceSamples = [];
   List<double> _heartRateSamples = [];
   double _workoutIntensity = 1.0;
+  
+  // Real-time calories tracking
+  double _currentCalories = 0.0;
+  double _totalElevationGained = 0.0;
 
   // Summary caching
   RideSummary? _lastSummary;
@@ -82,6 +86,7 @@ class RideProvider with ChangeNotifier {
   double get currentHeartRate => _currentHeartRate;
   double get workoutIntensity => _workoutIntensity;
   VirtualFitnessDevice? get activeDevice => _activeDevice;
+  double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
   void initializeRide(SavedRoute route, {Uint8List? thumbnail}) {
@@ -452,7 +457,30 @@ class RideProvider with ChangeNotifier {
     // Interpolate elevation
     final startElev = _route!.elevationProfile.elevations[_currentSegmentIndex];
     final endElev = _route!.elevationProfile.elevations[_currentSegmentIndex + 1];
-    _currentElevation = startElev + (endElev - startElev) * _progressInSegment;
+    final newElevation = startElev + (endElev - startElev) * _progressInSegment;
+    
+    // Track elevation gain for calories
+    if (newElevation > _currentElevation) {
+      _totalElevationGained += (newElevation - _currentElevation);
+    }
+    _currentElevation = newElevation;
+    
+    // Update real-time calories
+    final bodyWeight = 70.0; // Default weight, can be updated from profile
+    final avgSpeed = _completedDistance > 0 && _movingTime.inSeconds > 0
+        ? (_completedDistance / _movingTime.inSeconds) * 3.6
+        : 0.0;
+    double met;
+    if (avgSpeed < 16) {
+      met = 8.0;
+    } else if (avgSpeed < 25) {
+      met = 10.0;
+    } else {
+      met = 12.0;
+    }
+    met += (_totalElevationGained / 100) * 0.5;
+    final hours = _movingTime.inSeconds / 3600.0;
+    _currentCalories = met * bodyWeight * hours;
   }
 
   /// Generate ride summary
@@ -554,6 +582,8 @@ class RideProvider with ChangeNotifier {
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
     _activeDevice = null;
+    _currentCalories = 0.0;
+    _totalElevationGained = 0.0;
   }
 
   @override
