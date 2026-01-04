@@ -55,6 +55,20 @@ class _SummaryScreenState extends State<SummaryScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // Route thumbnail
+            if (widget.summary.routeThumbnail != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: Image.memory(
+                  widget.summary.routeThumbnail!,
+                  height: 200,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+            
             // Status banner
             Card(
               color: widget.summary.completed ? Colors.green.shade50 : Colors.orange.shade50,

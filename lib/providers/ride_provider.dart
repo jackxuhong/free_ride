@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:free_ride/models/saved_route.dart';
@@ -49,6 +50,7 @@ class RideProvider with ChangeNotifier {
 
   // Summary caching
   RideSummary? _lastSummary;
+  Uint8List? _routeThumbnail;
 
   // Getters
   RideStatus get status => _status;
@@ -69,9 +71,10 @@ class RideProvider with ChangeNotifier {
   DateTime? get startTime => _startTime;
 
   /// Initialize ride with a route
-  void initializeRide(SavedRoute route) {
+  void initializeRide(SavedRoute route, {Uint8List? thumbnail}) {
     _route = route;
     _status = RideStatus.notStarted;
+    _routeThumbnail = thumbnail;
     _resetMetrics();
     
     // Set initial position
@@ -424,8 +427,7 @@ class RideProvider with ChangeNotifier {
       routeId: _route!.id,
       routeName: _route!.displayName,
       completed: completed,
-      cancellationReason: cancellationReason,
-    );
+      cancellationReason: cancellationReason,      routeThumbnail: _routeThumbnail,    );
   }
 
   /// Reset all metrics

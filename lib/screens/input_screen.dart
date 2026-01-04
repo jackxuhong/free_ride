@@ -1,8 +1,12 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/providers/route_provider.dart';
+import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
@@ -28,6 +32,7 @@ class _InputScreenState extends State<InputScreen> {
   final _storageService = RouteStorageService();
   final _profileService = ProfileService();
   final _previewMapController = MapController();
+  final _previewMapKey = GlobalKey();
 
   int? _loadingLocationIndex;
   String? _selectedRouteId;
@@ -220,6 +225,45 @@ class _InputScreenState extends State<InputScreen> {
     setState(() {
       _selectedRouteId = routeId;
     });
+  }
+
+  Future<Uint8List?> _captureMapScreenshot() async {
+    try {
+      // Wait a bit to ensure map is fully rendered
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      final boundary = _previewMapKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return null;
+      
+      final image = await boundary.toImage(pixelRatio: 2.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint('Error capturing map screenshot: $e');
+      return null;
+    }
+  }
+
+  Future<void> _startRide() async {
+    final routeProvider = context.read<RouteProvider>();
+    if (routeProvider.currentRoute == null) return;
+    
+    // Capture the route preview as thumbnail
+    final thumbnail = await _captureMapScreenshot();
+    
+    if (mounted) {
+      // Initialize ride with thumbnail
+      context.read<RideProvider>().initializeRide(
+        routeProvider.currentRoute!,
+        thumbnail: thumbnail,
+      );
+      
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (context) => const SimulationScreen(),
+        ),
+      );
+    }
   }
 
   @override
@@ -528,8 +572,10 @@ class _InputScreenState extends State<InputScreen> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     clipBehavior: Clip.antiAlias,
-                    child: Builder(
-                      builder: (context) {
+                    child: RepaintBoundary(
+                      key: _previewMapKey,
+                      child: Builder(
+                        builder: (context) {
                         // Fit bounds after the map is built
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           final waypoints = routeProvider.currentRoute!.coordinates.waypoints
@@ -594,20 +640,15 @@ class _InputScreenState extends State<InputScreen> {
                             ),
                           ],
                         );
-                      },
+                        },
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   
                   // Start Ride button
                   ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => const SimulationScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: _startRide,
                     icon: const Icon(Icons.directions_bike),
                     label: const Text('Start Ride'),
                     style: ElevatedButton.styleFrom(

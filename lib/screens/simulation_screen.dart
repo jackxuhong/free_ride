@@ -23,11 +23,8 @@ class _SimulationScreenState extends State<SimulationScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize ride immediately (synchronously) to avoid stale state
-    final route = context.read<RouteProvider>().currentRoute;
-    if (route != null) {
-      context.read<RideProvider>().initializeRide(route);
-    }
+    // Ride should already be initialized with thumbnail from input screen
+    // No need to re-initialize here
   }
 
   @override

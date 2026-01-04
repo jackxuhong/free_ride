@@ -327,27 +327,22 @@ class _RideHistoryCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(dateFormat.format(summary.startTime)),
             const SizedBox(height: 4),
-            Row(
+            Wrap(
+              spacing: 16,
+              runSpacing: 4,
               children: [
                 _SmallMetric(
                   icon: Icons.straighten,
                   value: summary.formattedDistance,
                 ),
-                const SizedBox(width: 16),
                 _SmallMetric(
                   icon: Icons.timer,
                   value: summary.formattedDuration,
                 ),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
                 _SmallMetric(
                   icon: Icons.speed,
                   value: summary.formattedAverageSpeed,
                 ),
-                const SizedBox(width: 16),
                 _SmallMetric(
                   icon: Icons.local_fire_department,
                   value: '${summary.caloriesBurned} kcal',
@@ -356,73 +351,10 @@ class _RideHistoryCard extends StatelessWidget {
             ),
           ],
         ),
-        trailing: PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert),
-          onSelected: (value) {
-            if (value == 'rename') {
-              onRename();
-            } else if (value == 'delete') {
-              onDelete();
-            } else if (value == 'continue') {
-              onContinue();
-            } else if (value == 'restart') {
-              onRestart();
-            }
-          },
-          itemBuilder: (context) => [
-            if (!summary.completed) ...[
-              const PopupMenuItem(
-                value: 'continue',
-                child: Row(
-                  children: [
-                    Icon(Icons.play_arrow, size: 20, color: Colors.green),
-                    SizedBox(width: 8),
-                    Text('Continue'),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'restart',
-                child: Row(
-                  children: [
-                    Icon(Icons.restart_alt, size: 20, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Restart'),
-                  ],
-                ),
-              ),
-            ] else
-              const PopupMenuItem(
-                value: 'restart',
-                child: Row(
-                  children: [
-                    Icon(Icons.restart_alt, size: 20, color: Colors.orange),
-                    SizedBox(width: 8),
-                    Text('Repeat'),
-                  ],
-                ),
-              ),
-            const PopupMenuItem(
-              value: 'rename',
-              child: Row(
-                children: [
-                  Icon(Icons.edit, size: 20),
-                  SizedBox(width: 8),
-                  Text('Rename'),
-                ],
-              ),
-            ),
-            const PopupMenuItem(
-              value: 'delete',
-              child: Row(
-                children: [
-                  Icon(Icons.delete, size: 20, color: Colors.red),
-                  SizedBox(width: 8),
-                  Text('Delete', style: TextStyle(color: Colors.red)),
-                ],
-              ),
-            ),
-          ],
+        trailing: IconButton(
+          icon: const Icon(Icons.delete, color: Colors.red),
+          onPressed: onDelete,
+          tooltip: 'Delete',
         ),
         isThreeLine: true,
       ),
