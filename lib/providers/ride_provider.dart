@@ -230,18 +230,21 @@ class RideProvider with ChangeNotifier {
     // This keeps startTime available for UI navigation check
     
     // Auto-save completed ride to history
-    _autoSaveRide(summary);
+    await _autoSaveRide(summary);
     
     notifyListeners();
     return summary;
   }
 
   /// Auto-save ride to history
-  void _autoSaveRide(RideSummary summary) async {
+  Future<void> _autoSaveRide(RideSummary summary) async {
     try {
       final storage = RouteStorageService();
+      await storage.init(); // Ensure storage is initialized
       await storage.saveRideHistory(summary);
+      print('✅ Ride saved to history: ${summary.routeName}');
     } catch (e) {
+      print('❌ Failed to save ride: $e');
       // Silently fail - user can manually save from summary screen
     }
   }

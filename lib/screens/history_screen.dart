@@ -26,6 +26,24 @@ class _HistoryScreenState extends State<HistoryScreen> {
     _loadHistory();
   }
 
+  @override
+  void didUpdateWidget(HistoryScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _loadHistory();
+  }
+
+  // Reload history when returning to this screen
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Check if we're becoming visible (e.g., when returning from another screen)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadHistory();
+      }
+    });
+  }
+
   Future<void> _loadHistory() async {
     setState(() => _isLoading = true);
 
