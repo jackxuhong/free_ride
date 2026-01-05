@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/models/ride_summary.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
@@ -369,9 +370,11 @@ class RideProvider with ChangeNotifier {
       }
 
       // Send control commands to device based on route grade and intensity
-      final deviceType = _activeDevice.runtimeType.toString();
+      final isBike = _activeDevice is FTMSService 
+          ? (_activeDevice as FTMSService).deviceType == DeviceType.indoorBike
+          : _activeDevice.runtimeType.toString().contains('Bike');
       
-      if (deviceType.contains('Bike')) {
+      if (isBike) {
         // Map grade percentage to resistance and apply intensity multiplier
         // Grade is stored as decimal (0.05 = 5%), convert to percentage first
         final gradePercent = _currentGrade * 100;
@@ -383,7 +386,6 @@ class RideProvider with ChangeNotifier {
         final rangeSize = maxRes - minRes;
         final baseResistance = (gradePercent * (rangeSize / 20.0) + minRes + (rangeSize * 0.25)).clamp(minRes, maxRes);
         final adjustedResistance = (baseResistance * _workoutIntensity).clamp(minRes, maxRes).round();
-        print('Grade: ${gradePercent.toStringAsFixed(1)}%, Resistance: $adjustedResistance (range: ${minRes.toInt()}-${maxRes.toInt()})');
         _activeDevice!.sendControlCommand(SetResistance(adjustedResistance));
       } else {
         // Map grade to incline percentage and apply intensity multiplier

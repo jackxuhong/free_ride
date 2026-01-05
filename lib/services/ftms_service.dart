@@ -50,6 +50,7 @@ class FTMSService extends VirtualFitnessDevice {
   static const String controlPointUuid = '00002ad9-0000-1000-8000-00805f9b34fb';
   static const String resistanceRangeUuid = '00002ad6-0000-1000-8000-00805f9b34fb';
   static const String inclineRangeUuid = '00002ad5-0000-1000-8000-00805f9b34fb';
+  static const String featureUuid = '00002acc-0000-1000-8000-00805f9b34fb';
   
   /// Normalize UUID to short form for comparison (e.g., "1826" or "00001826-0000-1000-8000-00805f9b34fb" -> "1826")
   static String _normalizeUuid(String uuid) {
@@ -122,7 +123,7 @@ class FTMSService extends VirtualFitnessDevice {
             (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(treadmillDataUuid),
           );
           
-          // Determine device type
+          // Determine device type - prefer bike if both are present
           DeviceType deviceType = DeviceType.indoorBike; // default
           if (hasTreadmillData && !hasBikeData) {
             deviceType = DeviceType.treadmill;
@@ -132,8 +133,6 @@ class FTMSService extends VirtualFitnessDevice {
             'device': device,
             'deviceType': deviceType,
           });
-          
-          // print('Found ${deviceType == DeviceType.indoorBike ? "bike" : "treadmill"}: ${device.platformName}');
           
           // Disconnect after getting info and wait for disconnect to complete
           await device.disconnect();
@@ -208,6 +207,16 @@ class FTMSService extends VirtualFitnessDevice {
       
       // Read device capabilities for bikes
       if (_deviceType == DeviceType.indoorBike) {
+        // Read fitness machine features (silently)
+        try {
+          final featureChar = ftmsService.characteristics.firstWhere(
+            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(featureUuid),
+          );
+          await featureChar.read();
+        } catch (e) {
+          // Features not available
+        }
+        
         try {
           final resistanceRangeChar = ftmsService.characteristics.firstWhere(
             (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(resistanceRangeUuid),
@@ -217,7 +226,6 @@ class FTMSService extends VirtualFitnessDevice {
             // Format: min (sint16), max (sint16), increment (uint16)
             _minResistance = ByteData.sublistView(Uint8List.fromList(value.sublist(0, 2))).getInt16(0, Endian.little);
             _maxResistance = ByteData.sublistView(Uint8List.fromList(value.sublist(2, 4))).getInt16(0, Endian.little);
-            print('Device resistance range: $_minResistance - $_maxResistance');
           }
         } catch (e) {
           // Use defaults if characteristic not found or read fails
@@ -257,9 +265,21 @@ class FTMSService extends VirtualFitnessDevice {
         _controlCharacteristic = ftmsService.characteristics.firstWhere(
           (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(controlPointUuid),
         );
-        print('Control point characteristic found and cached');
+        
+        // Subscribe to control point notifications to receive responses
+        await _controlCharacteristic!.setNotifyValue(true);
+        _controlCharacteristic!.lastValueStream.listen((value) {
+          // Control point responses received
+        });
+        
+        // Request control (opcode 0x00)
+        try {
+          await _controlCharacteristic!.write([0x00], withoutResponse: false);
+        } catch (e) {
+          // Could not request control
+        }
       } catch (e) {
-        print('Warning: Control point characteristic not found - device may not support control commands');
+        // Control point not available
       }
 
       // Subscribe to notifications
@@ -372,14 +392,22 @@ class FTMSService extends VirtualFitnessDevice {
       List<int> packet;
       switch (command) {
         case SetResistance(level: final level):
-          // Opcode 0x04: Set Target Resistance Level
-          final resistanceValue = (level * 10).toInt(); // Resolution 0.1
+          // For bikes with simulation support, use simulation parameters instead
+          // Opcode 0x11: Set Indoor Bike Simulation Parameters
+          // Calculate grade from resistance level
+          final gradePercent = ((level - _minResistance - (_maxResistance - _minResistance) * 0.25) * 20.0 / (_maxResistance - _minResistance)).clamp(-5.0, 15.0);
+          final windSpeed = 0; // 0 m/s
+          final grade = (gradePercent * 100).round(); // Convert to 0.01% resolution
+          final crr = 40; // 0.004 (typical rolling resistance)
+          final windResistance = 40; // 0.4 kg/m (typical)
+          
           packet = [
-            0x04,
-            resistanceValue & 0xFF,
-            (resistanceValue >> 8) & 0xFF,
+            0x11, // Opcode: Set Indoor Bike Simulation Parameters
+            windSpeed & 0xFF, (windSpeed >> 8) & 0xFF, // Wind speed (sint16, 0.001 m/s resolution)
+            grade & 0xFF, (grade >> 8) & 0xFF, // Grade (sint16, 0.01% resolution)
+            crr, // Coefficient of rolling resistance (uint8, 0.0001 resolution)
+            windResistance, // Wind resistance coefficient (uint8, 0.01 kg/m resolution)
           ];
-          print('Sending resistance command: ${level.toInt()} (range: $_minResistance-$_maxResistance, raw value: $resistanceValue)');
         case SetIncline(percentage: final percentage):
           // Opcode 0x06: Set Target Inclination
           final inclineValue = (percentage * 10).round(); // Resolution 0.1%
@@ -388,7 +416,6 @@ class FTMSService extends VirtualFitnessDevice {
             inclineValue & 0xFF,
             (inclineValue >> 8) & 0xFF,
           ];
-          print('Sending incline command: ${percentage.toStringAsFixed(1)}% (raw value: $inclineValue)');
       }
 
       await _controlCharacteristic!.write(packet, withoutResponse: false);
