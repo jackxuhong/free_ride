@@ -17,7 +17,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Devices'),
+        title: const Text('Manage Devices'),
       ),
       body: Consumer<DeviceProvider>(
         builder: (context, deviceProvider, child) {

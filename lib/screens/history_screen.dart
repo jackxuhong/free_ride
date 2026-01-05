@@ -230,7 +230,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ride History'),
+        title: const Text('Exercise History'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

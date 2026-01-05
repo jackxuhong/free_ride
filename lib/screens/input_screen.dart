@@ -278,7 +278,7 @@ class _InputScreenState extends State<InputScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Plan Your Ride'),
+        title: const Text('Plan Your Exercise'),
       ),
       body: Stack(
         children: [
