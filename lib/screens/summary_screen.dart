@@ -137,7 +137,7 @@ class _SummaryScreenState extends State<SummaryScreen> {
                       backgroundColor: Colors.orange,
                       foregroundColor: Colors.white,
                     ),
-                    child: const Text('Repeat Ride'),
+                    child: const Text('Repeat'),
                   ),
                 ),
                 const SizedBox(width: 12),
