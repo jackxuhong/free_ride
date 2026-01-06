@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
@@ -26,12 +27,16 @@ class _SimulationScreenState extends State<SimulationScreen> {
   @override
   void initState() {
     super.initState();
+    // Enable wakelock to keep screen on during ride
+    WakelockPlus.enable();
     // Ride should already be initialized with thumbnail from input screen
     // No need to re-initialize here
   }
 
   @override
   void dispose() {
+    // Disable wakelock when leaving ride screen
+    WakelockPlus.disable();
     _mapController.dispose();
     super.dispose();
   }
