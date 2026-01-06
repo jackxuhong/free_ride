@@ -80,7 +80,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text('User Profile'),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

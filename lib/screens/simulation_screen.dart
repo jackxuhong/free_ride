@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
+import 'package:free_ride/providers/device_provider.dart';
+import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
+import 'package:free_ride/widgets/device_connection_widget.dart';
 
 class SimulationScreen extends StatefulWidget {
   const SimulationScreen({super.key});
@@ -23,12 +27,16 @@ class _SimulationScreenState extends State<SimulationScreen> {
   @override
   void initState() {
     super.initState();
+    // Enable wakelock to keep screen on during ride
+    WakelockPlus.enable();
     // Ride should already be initialized with thumbnail from input screen
     // No need to re-initialize here
   }
 
   @override
   void dispose() {
+    // Disable wakelock when leaving ride screen
+    WakelockPlus.disable();
     _mapController.dispose();
     super.dispose();
   }
@@ -43,6 +51,68 @@ class _SimulationScreenState extends State<SimulationScreen> {
     setState(() {
       _autoFollow = true;
     });
+  }
+
+  void _showIntensityControl(BuildContext context, RideProvider rideProvider) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Container(
+              padding: const EdgeInsets.all(24.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Workout Intensity',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                    style: const TextStyle(
+                      fontSize: 36,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Slider(
+                    value: rideProvider.workoutIntensity,
+                    min: 0.5,
+                    max: 2.0,
+                    divisions: 15,
+                    label: '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                    onChanged: (value) {
+                      setState(() {
+                        rideProvider.setWorkoutIntensity(value);
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('0.5× (Easy)', style: TextStyle(color: Colors.grey[600])),
+                      Text('2.0× (Hard)', style: TextStyle(color: Colors.grey[600])),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text('Done'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
   }
 
   Future<bool> _showCancelDialog() async {
@@ -141,6 +211,16 @@ class _SimulationScreenState extends State<SimulationScreen> {
       appBar: AppBar(
         title: Text(route.displayName),
         actions: [
+          // Device connection badge
+          if (rideProvider.activeDevice != null)
+            Padding(
+              padding: const EdgeInsets.only(right: 8.0),
+              child: Center(
+                child: DeviceConnectionWidget(
+                  device: context.read<DeviceProvider>().selectedDevice!,
+                ),
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.close, color: Colors.red),
             onPressed: _cancelRide,
@@ -150,6 +230,48 @@ class _SimulationScreenState extends State<SimulationScreen> {
       ),
       body: Column(
         children: [
+          // Connection status banner for FTMS devices
+          if (rideProvider.activeDevice is FTMSService)
+            StreamBuilder<bool>(
+              stream: (rideProvider.activeDevice as FTMSService).connectionState,
+              initialData: (rideProvider.activeDevice as FTMSService).isConnected,
+              builder: (context, snapshot) {
+                final isConnected = snapshot.data ?? false;
+                if (isConnected) return const SizedBox.shrink();
+                
+                return Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                  color: Colors.orange,
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Device disconnected - Reconnecting...',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _cancelRide,
+                        child: const Text(
+                          'CANCEL',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           // Map with floating button
           Expanded(
             flex: 3,
@@ -196,15 +318,22 @@ class _SimulationScreenState extends State<SimulationScreen> {
                     ),
                     if (rideProvider.currentPosition != null)
                       MarkerLayer(
+                        rotate: false,
                         markers: [
                           Marker(
                             point: rideProvider.currentPosition!,
                             width: 40,
                             height: 40,
-                            child: const Icon(
-                              Icons.directions_bike,
-                              size: 40,
-                              color: Colors.green,
+                            alignment: Alignment.center,
+                            child: Transform.rotate(
+                              angle: _isNavigationMode ? rideProvider.currentBearing * (3.14159265359 / 180) : 0,
+                              child: Icon(
+                                rideProvider.activeDevice?.deviceType.name == 'treadmill'
+                                    ? Icons.directions_run
+                                    : Icons.directions_bike,
+                                size: 40,
+                                color: Colors.green,
+                              ),
                             ),
                           ),
                         ],
@@ -222,7 +351,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       if (!_autoFollow)
                         FloatingActionButton(
                           heroTag: 'recenter',
-                          mini: true,
                           onPressed: _recenterMap,
                           backgroundColor: Colors.white,
                           foregroundColor: Colors.blue,
@@ -232,7 +360,6 @@ class _SimulationScreenState extends State<SimulationScreen> {
                       // Navigation mode toggle
                       FloatingActionButton(
                         heroTag: 'navigation',
-                        mini: true,
                         onPressed: _toggleNavigationMode,
                         backgroundColor: _isNavigationMode ? Colors.blue : Colors.white,
                         foregroundColor: _isNavigationMode ? Colors.white : Colors.grey,
@@ -240,6 +367,17 @@ class _SimulationScreenState extends State<SimulationScreen> {
                           _isNavigationMode ? Icons.navigation : Icons.navigation_outlined,
                         ),
                       ),
+                      // Intensity control (for device rides)
+                      if (rideProvider.activeDevice != null) ...[
+                        const SizedBox(height: 8),
+                        FloatingActionButton(
+                          heroTag: 'intensity',
+                          onPressed: () => _showIntensityControl(context, rideProvider),
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                          child: const Icon(Icons.fitness_center),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       // Play/pause button
                       _buildPlayPauseButton(rideProvider),
@@ -249,70 +387,118 @@ class _SimulationScreenState extends State<SimulationScreen> {
               ],
             ),
           ),
-          // Stats display
-          Expanded(
-            flex: 2,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  // Speed, elevation, grade
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _MetricCard(
+          // Stats panel - fixed height, scales width only
+          Container(
+            height: 335,
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                // Speed, elevation, grade
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Speed',
                         value: '${rideProvider.currentSpeed.toStringAsFixed(1)} km/h',
                         icon: Icons.speed,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Elevation',
                         value: '${rideProvider.currentElevation.toStringAsFixed(0)} m',
                         icon: Icons.terrain,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Grade',
                         value: '${rideProvider.currentGrade.toStringAsFixed(1)}%',
                         icon: Icons.trending_up,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  // Distance and time
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceAround,
-                    children: [
-                      _MetricCard(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                // Distance and time
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Distance',
                         value: '${(rideProvider.completedDistance / 1000).toStringAsFixed(2)} km',
                         icon: Icons.straighten,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Time',
                         value: _formatDuration(rideProvider.totalDuration),
                         icon: Icons.timer,
                       ),
-                      _MetricCard(
+                    ),
+                    Expanded(
+                      child: _MetricCard(
                         label: 'Progress',
                         value: '${rideProvider.completionPercentage.toStringAsFixed(0)}%',
                         icon: Icons.flag,
                       ),
+                    ),
+                  ],
+                ),
+                // Show device metrics if available
+                if (rideProvider.currentHeartRate > 0 || rideProvider.activeDevice != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      Expanded(
+                        child: _MetricCard(
+                          label: 'Calories',
+                          value: '${rideProvider.currentCalories.toStringAsFixed(0)} kcal',
+                          icon: Icons.local_fire_department,
+                          color: Colors.orange,
+                        ),
+                      ),
+                      if (rideProvider.currentHeartRate > 0)
+                        Expanded(
+                          child: _MetricCard(
+                            label: 'Heart Rate',
+                            value: '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm',
+                            icon: Icons.favorite,
+                            color: Colors.red,
+                          ),
+                        ),
+                      if (rideProvider.activeDevice != null)
+                        Expanded(
+                          child: _MetricCard(
+                            label: 'Intensity',
+                            value: '${rideProvider.workoutIntensity.toStringAsFixed(1)}×',
+                            icon: Icons.fitness_center,
+                            color: Colors.blue,
+                          ),
+                        ),
                     ],
                   ),
-                  const Spacer(),
-                  // Elevation chart
-                  ElevationChart(
+                ],
+                const Spacer(),
+                // Elevation chart - fixed height
+                SizedBox(
+                  height: 70,
+                  child: ElevationChart(
                     route: route,
                     currentProgress: rideProvider.completionPercentage / 100,
                   ),
-                  const SizedBox(height: 8),
-                  // Progress bar
-                  LinearProgressIndicator(
-                    value: rideProvider.completionPercentage / 100,
-                    minHeight: 8,
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 4),
+                // Progress bar - fixed height
+                LinearProgressIndicator(
+                  value: rideProvider.completionPercentage / 100,
+                  minHeight: 6,
+                ),
+              ],
             ),
           ),
         ],
@@ -363,11 +549,13 @@ class _MetricCard extends StatelessWidget {
   final String label;
   final String value;
   final IconData icon;
+  final Color? color;
 
   const _MetricCard({
     required this.label,
     required this.value,
     required this.icon,
+    this.color,
   });
 
   @override
@@ -375,7 +563,7 @@ class _MetricCard extends StatelessWidget {
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 24, color: Theme.of(context).primaryColor),
+        Icon(icon, size: 24, color: color ?? Theme.of(context).primaryColor),
         const SizedBox(height: 4),
         Text(
           label,

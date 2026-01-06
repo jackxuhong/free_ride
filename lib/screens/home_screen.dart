@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:free_ride/screens/input_screen.dart';
 import 'package:free_ride/screens/history_screen.dart';
+import 'package:free_ride/screens/device_setup_screen.dart';
 import 'package:free_ride/screens/profile_screen.dart';
 import 'package:free_ride/services/profile_service.dart';
 
@@ -15,6 +16,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final _profileService = ProfileService();
   bool _isLoading = true;
+  final GlobalKey<HistoryScreenRefreshState> _historyKey = GlobalKey();
 
   @override
   void initState() {
@@ -26,7 +28,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final hasProfile = await _profileService.hasProfile();
     if (mounted) {
       setState(() {
-        _currentIndex = hasProfile ? 0 : 2; // Routes if has profile, Profile if not
+        _currentIndex = hasProfile ? 0 : 3; // Routes if has profile, Profile if not
         _isLoading = false;
       });
     }
@@ -40,7 +42,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Widget> get _screens => [
         const InputScreen(),
-        const HistoryScreen(),
+        HistoryScreenRefresh(key: _historyKey),
+        const DeviceSetupScreen(),
         ProfileScreen(onProfileSaved: _onProfileSaved),
       ];
 
@@ -63,7 +66,14 @@ class _HomeScreenState extends State<HomeScreen> {
           setState(() {
             _currentIndex = index;
           });
+          // Refresh history when tapping the History tab
+          if (index == 1) {
+            _historyKey.currentState?.refresh();
+          }
         },
+        type: BottomNavigationBarType.fixed,
+        selectedItemColor: Colors.blue,
+        unselectedItemColor: Colors.grey,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.route),
@@ -72,6 +82,10 @@ class _HomeScreenState extends State<HomeScreen> {
           BottomNavigationBarItem(
             icon: Icon(Icons.history),
             label: 'History',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.bluetooth),
+            label: 'Devices',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.person),

@@ -8,6 +8,27 @@ import 'package:free_ride/screens/simulation_screen.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 
+// Wrapper widget to expose refresh method
+class HistoryScreenRefresh extends StatefulWidget {
+  const HistoryScreenRefresh({super.key});
+
+  @override
+  State<HistoryScreenRefresh> createState() => HistoryScreenRefreshState();
+}
+
+class HistoryScreenRefreshState extends State<HistoryScreenRefresh> {
+  final GlobalKey<_HistoryScreenState> _historyKey = GlobalKey();
+
+  void refresh() {
+    _historyKey.currentState?._loadHistory();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return HistoryScreen(key: _historyKey);
+  }
+}
+
 class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
 
@@ -24,24 +45,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void initState() {
     super.initState();
     _loadHistory();
-  }
-
-  @override
-  void didUpdateWidget(HistoryScreen oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    _loadHistory();
-  }
-
-  // Reload history when returning to this screen
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // Check if we're becoming visible (e.g., when returning from another screen)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _loadHistory();
-      }
-    });
   }
 
   Future<void> _loadHistory() async {
@@ -227,7 +230,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ride History'),
+        title: const Text('Exercise History'),
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())

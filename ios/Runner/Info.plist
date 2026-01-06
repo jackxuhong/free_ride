@@ -30,6 +30,10 @@
 	<string>We need your location to set ride start and end points</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>We need your location to set ride start and end points</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Free Ride needs Bluetooth to connect to your exercise bike or treadmill</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Free Ride connects to fitness equipment via Bluetooth</string>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
 	<key>UILaunchStoryboardName</key>

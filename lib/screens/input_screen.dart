@@ -7,11 +7,13 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
+import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
+import 'package:free_ride/screens/device_setup_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 
 class InputScreen extends StatefulWidget {
@@ -246,15 +248,19 @@ class _InputScreenState extends State<InputScreen> {
 
   Future<void> _startRide() async {
     final routeProvider = context.read<RouteProvider>();
+    final deviceProvider = context.read<DeviceProvider>();
+    
     if (routeProvider.currentRoute == null) return;
+    if (deviceProvider.selectedDevice == null) return;
     
     // Capture the route preview as thumbnail
     final thumbnail = await _captureMapScreenshot();
     
     if (mounted) {
-      // Initialize ride with thumbnail
-      context.read<RideProvider>().initializeRide(
+      // Initialize ride with device and thumbnail
+      context.read<RideProvider>().startRideWithDevice(
         routeProvider.currentRoute!,
+        deviceProvider.activeDevice!,
         thumbnail: thumbnail,
       );
       
@@ -272,7 +278,7 @@ class _InputScreenState extends State<InputScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Plan Your Ride'),
+        title: const Text('Plan Your Exercise'),
       ),
       body: Stack(
         children: [
@@ -281,7 +287,68 @@ class _InputScreenState extends State<InputScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const SizedBox(height: 20),
+                // Device Selection Card (moved to top)
+                Consumer<DeviceProvider>(
+                  builder: (context, deviceProvider, _) {
+                    final device = deviceProvider.selectedDevice;
+                    return Card(
+                      child: InkWell(
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DeviceSetupScreen(),
+                            ),
+                          );
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Row(
+                            children: [
+                              Icon(
+                                device?.deviceType.name == 'indoorBike'
+                                    ? Icons.directions_bike
+                                    : Icons.directions_run,
+                                size: 32,
+                                color: device != null ? Colors.green : Colors.grey,
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      device?.name ?? 'No device selected',
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      device != null
+                                          ? (device.isVirtual ? 'Virtual Device' : 'Bluetooth Device')
+                                          : 'Tap to select a device',
+                                      style: TextStyle(
+                                        fontSize: 14,
+                                        color: Colors.grey[600],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Icon(
+                                Icons.chevron_right,
+                                color: Colors.grey[400],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+                const SizedBox(height: 16),
                 
                 // Saved routes dropdown
                 FutureBuilder<List<SavedRoute>>(
@@ -647,15 +714,22 @@ class _InputScreenState extends State<InputScreen> {
                   const SizedBox(height: 16),
                   
                   // Start Ride button
-                  ElevatedButton.icon(
-                    onPressed: _startRide,
-                    icon: const Icon(Icons.directions_bike),
-                    label: const Text('Start Ride'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
+                  Consumer<DeviceProvider>(
+                    builder: (context, deviceProvider, _) {
+                      final hasDevice = deviceProvider.selectedDevice != null;
+                      return ElevatedButton.icon(
+                        onPressed: hasDevice ? _startRide : null,
+                        icon: const Icon(Icons.directions_bike),
+                        label: const Text('Start Ride'),
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.all(16),
+                          backgroundColor: Colors.green,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey[300],
+                          disabledForegroundColor: Colors.grey[600],
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 8),
                   
