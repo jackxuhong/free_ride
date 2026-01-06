@@ -269,6 +269,9 @@ class RideProvider with ChangeNotifier {
         routeName: 'Unknown',
         completed: false,
         cancellationReason: 'ride_not_started',
+        startInput: null,
+        endInput: null,
+        waypointInputs: null,
       );
     }
     
@@ -308,6 +311,9 @@ class RideProvider with ChangeNotifier {
         routeName: _route?.displayName ?? 'Unknown',
         completed: true,
         cancellationReason: null,
+        startInput: _route?.startInput,
+        endInput: _route?.endInput,
+        waypointInputs: _route?.waypointInputs,
       );
     }
     
@@ -595,7 +601,12 @@ class RideProvider with ChangeNotifier {
       routeId: _route!.id,
       routeName: _route!.displayName,
       completed: completed,
-      cancellationReason: cancellationReason,      routeThumbnail: _routeThumbnail,    );
+      cancellationReason: cancellationReason,
+      routeThumbnail: _routeThumbnail,
+      startInput: _route!.startInput,
+      endInput: _route!.endInput,
+      waypointInputs: _route!.waypointInputs,
+    );
   }
 
   /// Reset all metrics

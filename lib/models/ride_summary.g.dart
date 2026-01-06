@@ -41,13 +41,16 @@ class RideSummaryAdapter extends TypeAdapter<RideSummary> {
       completed: fields[21] as bool,
       cancellationReason: fields[22] as String?,
       routeThumbnail: fields[23] as Uint8List?,
+      startInput: fields[24] as String?,
+      endInput: fields[25] as String?,
+      waypointInputs: (fields[26] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, RideSummary obj) {
     writer
-      ..writeByte(24)
+      ..writeByte(27)
       ..writeByte(0)
       ..write(obj.totalDuration)
       ..writeByte(1)
@@ -95,7 +98,13 @@ class RideSummaryAdapter extends TypeAdapter<RideSummary> {
       ..writeByte(22)
       ..write(obj.cancellationReason)
       ..writeByte(23)
-      ..write(obj.routeThumbnail);
+      ..write(obj.routeThumbnail)
+      ..writeByte(24)
+      ..write(obj.startInput)
+      ..writeByte(25)
+      ..write(obj.endInput)
+      ..writeByte(26)
+      ..write(obj.waypointInputs);
   }
 
   @override

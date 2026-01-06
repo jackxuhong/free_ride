@@ -50,12 +50,13 @@ class RouteStorageService {
       final updatedRoute = SavedRoute(
         id: route.id,
         timestamp: route.timestamp,
-        startAddress: route.startAddress,
-        endAddress: route.endAddress,
+        startInput: route.startInput,
+        endInput: route.endInput,
         coordinates: route.coordinates,
         geometry: route.geometry,
         elevationProfile: route.elevationProfile,
         customName: customName,
+        waypointInputs: route.waypointInputs,
       );
       await _routesBox.put(routeId, updatedRoute);
     }

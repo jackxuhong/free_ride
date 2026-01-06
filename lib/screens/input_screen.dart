@@ -213,8 +213,8 @@ class _InputScreenState extends State<InputScreen> {
     }
 
     // Set start and end
-    _locationControllers[0].text = route.startAddress;
-    _locationControllers[1].text = route.endAddress;
+    _locationControllers[0].text = route.startInput;
+    _locationControllers[1].text = route.endInput;
 
     // Add waypoints (if any) - insert before end location
     // waypoints are stored in the route, need to get them

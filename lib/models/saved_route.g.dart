@@ -19,27 +19,28 @@ class SavedRouteAdapter extends TypeAdapter<SavedRoute> {
     return SavedRoute(
       id: fields[0] as String,
       timestamp: fields[1] as DateTime,
-      startAddress: fields[2] as String,
-      endAddress: fields[3] as String,
+      startInput: fields[2] as String,
+      endInput: fields[3] as String,
       coordinates: fields[4] as RouteCoordinates,
       geometry: fields[5] as RouteGeometry,
       elevationProfile: fields[6] as ElevationProfile,
       customName: fields[7] as String?,
+      waypointInputs: (fields[8] as List?)?.cast<String>(),
     );
   }
 
   @override
   void write(BinaryWriter writer, SavedRoute obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
       ..write(obj.timestamp)
       ..writeByte(2)
-      ..write(obj.startAddress)
+      ..write(obj.startInput)
       ..writeByte(3)
-      ..write(obj.endAddress)
+      ..write(obj.endInput)
       ..writeByte(4)
       ..write(obj.coordinates)
       ..writeByte(5)
@@ -47,7 +48,9 @@ class SavedRouteAdapter extends TypeAdapter<SavedRoute> {
       ..writeByte(6)
       ..write(obj.elevationProfile)
       ..writeByte(7)
-      ..write(obj.customName);
+      ..write(obj.customName)
+      ..writeByte(8)
+      ..write(obj.waypointInputs);
   }
 
   @override

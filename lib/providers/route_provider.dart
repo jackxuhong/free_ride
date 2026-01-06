@@ -49,10 +49,6 @@ class RouteProvider with ChangeNotifier {
         );
       }
 
-      // Get readable addresses
-      final startAddress = await _geocodingService.reverseGeocode(startLatLng);
-      final endAddress = await _geocodingService.reverseGeocode(endLatLng);
-
       // Fetch route from OpenRouteService
       final routeResponse = await _openRouteService.getRoute(
         startLatLng,
@@ -86,8 +82,8 @@ class RouteProvider with ChangeNotifier {
       final route = SavedRoute(
         id: const Uuid().v4(),
         timestamp: DateTime.now(),
-        startAddress: startAddress,
-        endAddress: endAddress,
+        startInput: startInput,
+        endInput: endInput,
         coordinates: RouteCoordinates(
           startLat: startLatLng.latitude,
           startLon: startLatLng.longitude,
@@ -109,6 +105,7 @@ class RouteProvider with ChangeNotifier {
           maxElevation: maxElevation,
           minElevation: minElevation,
         ),
+        waypointInputs: waypointInputs,
       );
 
       // Save route
