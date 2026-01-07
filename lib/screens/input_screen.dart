@@ -38,6 +38,28 @@ class _InputScreenState extends State<InputScreen> {
 
   int? _loadingLocationIndex;
   String? _selectedRouteId;
+  int _routeListRefresh = 0; // Counter to force FutureBuilder refresh
+  bool _isRouteEditExpanded = true; // Default expanded for new route
+  bool _isRouteValidated = false; // True after Get Route succeeds
+  bool _hasUnsavedChanges = false; // True when inputs change after validation
+  bool _isRouteSaved = false; // True when Save succeeds
+
+  @override
+  void initState() {
+    super.initState();
+    // Add listeners to track input changes
+    for (var controller in _locationControllers) {
+      controller.addListener(_onRouteInputChanged);
+    }
+  }
+
+  void _onRouteInputChanged() {
+    if (_isRouteValidated) {
+      setState(() {
+        _hasUnsavedChanges = true;
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -51,7 +73,10 @@ class _InputScreenState extends State<InputScreen> {
   void _addLocation() {
     setState(() {
       // Insert before the last item (end location)
-      _locationControllers.insert(_locationControllers.length - 1, TextEditingController());
+      final newController = TextEditingController();
+      newController.addListener(_onRouteInputChanged);
+      _locationControllers.insert(_locationControllers.length - 1, newController);
+      _hasUnsavedChanges = true;
     });
   }
 
@@ -60,8 +85,10 @@ class _InputScreenState extends State<InputScreen> {
     if (_locationControllers.length <= 2) return;
     
     setState(() {
+      _locationControllers[index].removeListener(_onRouteInputChanged);
       _locationControllers[index].dispose();
       _locationControllers.removeAt(index);
+      _hasUnsavedChanges = true;
     });
   }
 
@@ -126,6 +153,13 @@ class _InputScreenState extends State<InputScreen> {
         waypointInputs: waypoints,
       );
       
+      // Route validated successfully
+      setState(() {
+        _isRouteValidated = true;
+        _hasUnsavedChanges = false;
+        _isRouteSaved = false; // Route has changed, needs to be saved again
+      });
+      
       // Route preview will show automatically when currentRoute is not null
     } catch (e) {
       if (mounted) {
@@ -154,6 +188,44 @@ class _InputScreenState extends State<InputScreen> {
     final routeProvider = context.read<RouteProvider>();
     if (routeProvider.currentRoute == null) return;
 
+    // If this is an existing saved route, update it without asking for name
+    if (_selectedRouteId != null) {
+      try {
+        // Get the existing route to keep its custom name
+        final existingRoute = _storageService.getRouteById(_selectedRouteId!);
+        if (existingRoute?.customName != null) {
+          // Delete the old route first (since fetchRoute creates a new ID)
+          await _storageService.deleteRoute(_selectedRouteId!);
+          
+          // Save the new route with the same name
+          await _storageService.updateRouteName(
+            routeProvider.currentRoute!.id,
+            existingRoute!.customName!,
+          );
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Route updated!')),
+            );
+            setState(() {
+              _isRouteSaved = true;
+              _selectedRouteId = routeProvider.currentRoute!.id; // Update to new route ID
+              _isRouteEditExpanded = false; // Collapse after save
+              _routeListRefresh++; // Force dropdown refresh
+            });
+          }
+          return;
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Failed to update route: $e')),
+          );
+        }
+        return;
+      }
+    }
+
+    // For new routes, ask for a name
     final nameController = TextEditingController();
     final name = await showDialog<String>(
       context: context,
@@ -191,7 +263,12 @@ class _InputScreenState extends State<InputScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Route saved!')),
           );
-          setState(() {}); // Refresh dropdown
+          setState(() {
+            _isRouteSaved = true;
+            _selectedRouteId = routeProvider.currentRoute!.id;
+            _isRouteEditExpanded = false; // Collapse after save
+            _routeListRefresh++; // Force dropdown refresh
+          });
         }
       } catch (e) {
         if (mounted) {
@@ -203,13 +280,56 @@ class _InputScreenState extends State<InputScreen> {
     }
   }
 
+  Future<void> _deleteRoute() async {
+    if (_selectedRouteId == null) return;
+    
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Route'),
+        content: const Text('Are you sure you want to delete this saved route?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    
+    if (confirmed == true) {
+      await _storageService.deleteRoute(_selectedRouteId!);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Route deleted')),
+        );
+        setState(() {
+          _selectedRouteId = null;
+          _isRouteSaved = false;
+          _isRouteValidated = false;
+          _isRouteEditExpanded = true;
+          _routeListRefresh++; // Force dropdown refresh
+          // Clear the current route from provider
+          context.read<RouteProvider>().clearRoute();
+        });
+      }
+    }
+  }
+
   void _loadSavedRoute(String routeId) {
     final route = _storageService.getRouteById(routeId);
     if (route == null) return;
 
     // Clear existing controllers except first 2
     while (_locationControllers.length > 2) {
-      _locationControllers.removeLast().dispose();
+      final controller = _locationControllers.removeLast();
+      controller.removeListener(_onRouteInputChanged);
+      controller.dispose();
     }
 
     // Set start and end
@@ -217,15 +337,23 @@ class _InputScreenState extends State<InputScreen> {
     _locationControllers[1].text = route.endInput;
 
     // Add waypoints (if any) - insert before end location
-    // waypoints are stored in the route, need to get them
-    // Since SavedRoute might not have waypoints field, we'll skip for now
-    // The route will be loaded into provider which has the waypoint data
+    if (route.waypointInputs != null && route.waypointInputs!.isNotEmpty) {
+      for (final waypointInput in route.waypointInputs!) {
+        final newController = TextEditingController(text: waypointInput);
+        newController.addListener(_onRouteInputChanged);
+        _locationControllers.insert(_locationControllers.length - 1, newController);
+      }
+    }
 
     // Load the route into provider
     context.read<RouteProvider>().loadRoute(route);
     
     setState(() {
       _selectedRouteId = routeId;
+      _isRouteEditExpanded = false; // Collapse edit section
+      _isRouteValidated = true; // Already validated
+      _isRouteSaved = true; // Already saved
+      _hasUnsavedChanges = false;
     });
   }
 
@@ -287,71 +415,9 @@ class _InputScreenState extends State<InputScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Device Selection Card (moved to top)
-                Consumer<DeviceProvider>(
-                  builder: (context, deviceProvider, _) {
-                    final device = deviceProvider.selectedDevice;
-                    return Card(
-                      child: InkWell(
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DeviceSetupScreen(),
-                            ),
-                          );
-                        },
-                        child: Padding(
-                          padding: const EdgeInsets.all(16.0),
-                          child: Row(
-                            children: [
-                              Icon(
-                                device?.deviceType.name == 'indoorBike'
-                                    ? Icons.directions_bike
-                                    : Icons.directions_run,
-                                size: 32,
-                                color: device != null ? Colors.green : Colors.grey,
-                              ),
-                              const SizedBox(width: 16),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      device?.name ?? 'No device selected',
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      device != null
-                                          ? (device.isVirtual ? 'Virtual Device' : 'Bluetooth Device')
-                                          : 'Tap to select a device',
-                                      style: TextStyle(
-                                        fontSize: 14,
-                                        color: Colors.grey[600],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              Icon(
-                                Icons.chevron_right,
-                                color: Colors.grey[400],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 16),
-                
                 // Saved routes dropdown
                 FutureBuilder<List<SavedRoute>>(
+                  key: ValueKey(_routeListRefresh),
                   future: Future.value(_storageService.getAllRoutes()),
                   builder: (context, snapshot) {
                     // Only show routes that have been explicitly saved with a custom name
@@ -366,34 +432,78 @@ class _InputScreenState extends State<InputScreen> {
                         DropdownButtonFormField<String>(
                           value: _selectedRouteId,
                           decoration: const InputDecoration(
-                            labelText: 'Load Saved Route',
+                            labelText: 'Create a new route or load a saved one',
                             prefixIcon: Icon(Icons.bookmark),
                             border: OutlineInputBorder(),
                           ),
-                          hint: const Text('Select a saved route'),
-                          items: routes.map((route) {
-                            return DropdownMenuItem<String>(
-                              value: route.id,
-                              child: Text(route.displayName),
-                            );
-                          }).toList(),
+                          hint: const Text('New Route'),
+                          items: [
+                            const DropdownMenuItem<String>(
+                              value: null,
+                              child: Text('New Route'),
+                            ),
+                            ...routes.map((route) {
+                              return DropdownMenuItem<String>(
+                                value: route.id,
+                                child: Text(route.displayName),
+                              );
+                            }),
+                          ],
                           onChanged: (value) {
-                            if (value != null) {
+                            if (value == null) {
+                              // New route selected - reset everything
+                              setState(() {
+                                _selectedRouteId = null;
+                                _isRouteEditExpanded = true;
+                                _isRouteValidated = false;
+                                _isRouteSaved = false;
+                                _hasUnsavedChanges = false;
+                                // Clear inputs
+                                for (var controller in _locationControllers) {
+                                  controller.text = '';
+                                }
+                                // Remove extra waypoints
+                                while (_locationControllers.length > 2) {
+                                  final controller = _locationControllers.removeLast();
+                                  controller.removeListener(_onRouteInputChanged);
+                                  controller.dispose();
+                                }
+                                // Clear route from provider
+                                context.read<RouteProvider>().clearRoute();
+                              });
+                            } else {
                               _loadSavedRoute(value);
                             }
                           },
                         ),
                         const SizedBox(height: 16),
-                        const Divider(thickness: 2),
-                        const SizedBox(height: 8),
                       ],
                     );
                   },
                 ),
                 
-                // Start location
-                // All locations section - dynamic labels based on position
-                ..._locationControllers.asMap().entries.map((entry) {
+                // Collapsible route edit section
+                Card(
+                  child: Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      key: ValueKey(_isRouteEditExpanded),
+                      title: const Text('Route Details', style: TextStyle(fontWeight: FontWeight.bold)),
+                      initiallyExpanded: _isRouteEditExpanded,
+                      onExpansionChanged: (expanded) {
+                        setState(() {
+                          _isRouteEditExpanded = expanded;
+                        });
+                      },
+                      children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          // Start location
+                          // All locations section - dynamic labels based on position
+                          ..._locationControllers.asMap().entries.map((entry) {
                   final index = entry.key;
                   final controller = entry.value;
                   final isFirst = index == 0;
@@ -541,93 +651,237 @@ class _InputScreenState extends State<InputScreen> {
                     ],
                   );
                 }).toList(),
-                const SizedBox(height: 24),
-                // Get Route button
-                ElevatedButton(
-                  onPressed: routeProvider.isLoading ? null : _getRoute,
-                  style: ElevatedButton.styleFrom(
-                    padding: const EdgeInsets.all(16),
+                          const SizedBox(height: 24),
+                          
+                          // Button row: Get Route, Save, Delete
+                          Row(
+                            children: [
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: (routeProvider.isLoading || (!_hasUnsavedChanges && _isRouteValidated))
+                                      ? null 
+                                      : _getRoute,
+                                  icon: routeProvider.isLoading
+                                      ? const SizedBox(
+                                          height: 20,
+                                          width: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2),
+                                        )
+                                      : const Icon(Icons.route, size: 20),
+                                  label: const Text('Get Route'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.all(16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isRouteValidated && !_isRouteSaved ? _saveCurrentRoute : null,
+                                  icon: const Icon(Icons.bookmark_add, size: 20),
+                                  label: const Text('Save'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.all(16),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: ElevatedButton.icon(
+                                  onPressed: _isRouteSaved ? _deleteRoute : null,
+                                  icon: const Icon(Icons.delete, size: 20),
+                                  label: const Text('Delete'),
+                                  style: ElevatedButton.styleFrom(
+                                    padding: const EdgeInsets.all(16),
+                                    backgroundColor: Colors.red,
+                                    foregroundColor: Colors.white,
+                                    disabledBackgroundColor: Colors.grey[300],
+                                    disabledForegroundColor: Colors.grey[600],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
+                    ),
+                  ],
+                    ),
                   ),
-                  child: routeProvider.isLoading
-                      ? const CircularProgressIndicator()
-                      : const Text('Get Route', style: TextStyle(fontSize: 16)),
                 ),
                 
                 // Route Preview
                 if (routeProvider.currentRoute != null) ...[
-                  const SizedBox(height: 24),
-                  const Divider(),
-                  const SizedBox(height: 16),
-                  Text(
-                    'Route Preview',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
+
                   const SizedBox(height: 16),
                   
-                  // Route stats
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  // Route stats, device selection, and start button - all in one Card
+                  Consumer<DeviceProvider>(
+                    builder: (context, deviceProvider, _) {
+                      final device = deviceProvider.selectedDevice;
+                      final hasDevice = device != null;
+                      return Card(
+                        child: Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: Column(
                             children: [
-                              Column(
+                              // Stats row
+                              Row(
                                 children: [
-                                  const Icon(Icons.straighten, size: 32),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${(routeProvider.currentRoute!.geometry.totalDistance / 1000).toStringAsFixed(2)} km',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.straighten, size: 28),
+                                        const SizedBox(width: 8),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${(routeProvider.currentRoute!.geometry.totalDistance / 1000).toStringAsFixed(2)} km',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const Text(
+                                              'Distance',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                  const Text('Distance'),
-                                ],
-                              ),
-                              Column(
-                                children: [
-                                  const Icon(Icons.trending_up, size: 32),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    '${routeProvider.currentRoute!.elevationProfile.totalElevationGain.toStringAsFixed(0)} m',
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
+                                  Expanded(
+                                    child: FutureBuilder(
+                                      future: _calculateEstimatedCalories(
+                                        routeProvider.currentRoute!.geometry.totalDistance / 1000,
+                                        routeProvider.currentRoute!.elevationProfile.totalElevationGain,
+                                      ),
+                                      builder: (context, snapshot) {
+                                        return Row(
+                                          mainAxisAlignment: MainAxisAlignment.center,
+                                          children: [
+                                            const Icon(Icons.local_fire_department, size: 28),
+                                            const SizedBox(width: 8),
+                                            Column(
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  snapshot.hasData ? '${snapshot.data!.toStringAsFixed(0)} kcal' : '--- kcal',
+                                                  style: const TextStyle(
+                                                    fontSize: 16,
+                                                    fontWeight: FontWeight.bold,
+                                                  ),
+                                                ),
+                                                const Text(
+                                                  'Est. Calories',
+                                                  style: TextStyle(fontSize: 12),
+                                                ),
+                                              ],
+                                            ),
+                                          ],
+                                        );
+                                      },
                                     ),
                                   ),
-                                  const Text('Elevation Gain'),
                                 ],
                               ),
-                              FutureBuilder(
-                                future: _calculateEstimatedCalories(
-                                  routeProvider.currentRoute!.geometry.totalDistance / 1000,
-                                  routeProvider.currentRoute!.elevationProfile.totalElevationGain,
-                                ),
-                                builder: (context, snapshot) {
-                                  return Column(
-                                    children: [
-                                      const Icon(Icons.local_fire_department, size: 32),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        snapshot.hasData ? '${snapshot.data!.toStringAsFixed(0)} kcal' : '--- kcal',
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.bold,
+                              const SizedBox(height: 16),
+                              const Divider(),
+                              const SizedBox(height: 16),
+                              // Device and Start button row
+                              Row(
+                                children: [
+                                  Expanded(
+                                    flex: 3,
+                                    child: InkWell(
+                                      onTap: () {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) => const DeviceSetupScreen(),
+                                          ),
+                                        );
+                                      },
+                                      child: Container(
+                                        height: 56,
+                                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(color: Colors.grey[300]!),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(
+                                              device?.deviceType.name == 'indoorBike'
+                                                  ? Icons.directions_bike
+                                                  : Icons.directions_run,
+                                              size: 28,
+                                              color: hasDevice ? Colors.green : Colors.grey,
+                                            ),
+                                            const SizedBox(width: 12),
+                                            Expanded(
+                                              child: Column(
+                                                mainAxisAlignment: MainAxisAlignment.center,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    device?.name ?? 'No device',
+                                                    style: const TextStyle(
+                                                      fontSize: 14,
+                                                      fontWeight: FontWeight.bold,
+                                                    ),
+                                                  ),
+                                                  Text(
+                                                    device != null
+                                                        ? (device.isVirtual ? 'Virtual' : 'Bluetooth')
+                                                        : 'Tap to select',
+                                                    style: TextStyle(
+                                                      fontSize: 12,
+                                                      color: Colors.grey[600],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            Icon(
+                                              Icons.chevron_right,
+                                              color: Colors.grey[400],
+                                              size: 20,
+                                            ),
+                                          ],
                                         ),
                                       ),
-                                      const Text('Est. Calories'),
-                                    ],
-                                  );
-                                },
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    flex: 2,
+                                    child: SizedBox(
+                                      height: 56,
+                                      child: ElevatedButton.icon(
+                                        onPressed: hasDevice ? _startRide : null,
+                                        icon: const Icon(Icons.play_arrow),
+                                        label: const Text('Start'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.green,
+                                          foregroundColor: Colors.white,
+                                          disabledBackgroundColor: Colors.grey[300],
+                                          disabledForegroundColor: Colors.grey[600],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ],
                           ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                   const SizedBox(height: 16),
                   
@@ -709,37 +963,6 @@ class _InputScreenState extends State<InputScreen> {
                         );
                         },
                       ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  
-                  // Start Ride button
-                  Consumer<DeviceProvider>(
-                    builder: (context, deviceProvider, _) {
-                      final hasDevice = deviceProvider.selectedDevice != null;
-                      return ElevatedButton.icon(
-                        onPressed: hasDevice ? _startRide : null,
-                        icon: const Icon(Icons.directions_bike),
-                        label: const Text('Start Ride'),
-                        style: ElevatedButton.styleFrom(
-                          padding: const EdgeInsets.all(16),
-                          backgroundColor: Colors.green,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey[300],
-                          disabledForegroundColor: Colors.grey[600],
-                        ),
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 8),
-                  
-                  // Save Route button
-                  OutlinedButton.icon(
-                    onPressed: _saveCurrentRoute,
-                    icon: const Icon(Icons.bookmark_add),
-                    label: const Text('Save Route'),
-                    style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.all(16),
                     ),
                   ),
                 ],
