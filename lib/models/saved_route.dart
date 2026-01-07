@@ -12,10 +12,10 @@ class SavedRoute extends HiveObject {
   final DateTime timestamp;
   
   @HiveField(2)
-  final String startAddress;
+  final String startInput; // Original user input (address or coordinates)
   
   @HiveField(3)
-  final String endAddress;
+  final String endInput; // Original user input (address or coordinates)
   
   @HiveField(4)
   final RouteCoordinates coordinates;
@@ -28,19 +28,32 @@ class SavedRoute extends HiveObject {
   
   @HiveField(7)
   final String? customName;
+  
+  @HiveField(8)
+  final List<String>? waypointInputs; // Original waypoint inputs
 
   SavedRoute({
     required this.id,
     required this.timestamp,
-    required this.startAddress,
-    required this.endAddress,
+    required this.startInput,
+    required this.endInput,
     required this.coordinates,
     required this.geometry,
     required this.elevationProfile,
     this.customName,
+    this.waypointInputs,
   });
   
-  String get displayName => customName ?? '$startAddress → $endAddress';
+  String get displayName => customName ?? '$startInput → $endInput';
+  
+  String get fullRouteDisplay {
+    final parts = [startInput];
+    if (waypointInputs != null && waypointInputs!.isNotEmpty) {
+      parts.addAll(waypointInputs!);
+    }
+    parts.add(endInput);
+    return parts.join(' → ');
+  }
 }
 
 @HiveType(typeId: 1)

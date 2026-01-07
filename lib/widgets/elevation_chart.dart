@@ -89,15 +89,17 @@ class ElevationChart extends StatelessWidget {
             ),
           ],
           extraLinesData: ExtraLinesData(
-            verticalLines: [
-              // Current position marker
-              VerticalLine(
-                x: currentDistanceKm,
-                color: Colors.green,
-                strokeWidth: 2,
-                dashArray: [5, 5],
-              ),
-            ],
+            verticalLines: currentProgress > 0
+                ? [
+                    // Current position marker
+                    VerticalLine(
+                      x: currentDistanceKm,
+                      color: Colors.green,
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    ),
+                  ]
+                : [],
           ),
           lineTouchData: const LineTouchData(enabled: false),
         ),

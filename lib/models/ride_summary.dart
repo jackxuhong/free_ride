@@ -82,6 +82,15 @@ class RideSummary extends HiveObject {
   
   @HiveField(23)
   final Uint8List? routeThumbnail;
+  
+  @HiveField(24)
+  final String? startInput; // Original user input (address or coordinates)
+  
+  @HiveField(25)
+  final String? endInput; // Original user input (address or coordinates)
+  
+  @HiveField(26)
+  final List<String>? waypointInputs; // Original waypoint inputs
 
   RideSummary({
     required this.totalDuration,
@@ -108,6 +117,9 @@ class RideSummary extends HiveObject {
     required this.completed,
     this.cancellationReason,
     this.routeThumbnail,
+    this.startInput,
+    this.endInput,
+    this.waypointInputs,
   });
   
   String get formattedDuration {
@@ -160,6 +172,9 @@ class RideSummary extends HiveObject {
       completed: completed,
       cancellationReason: cancellationReason,
       routeThumbnail: routeThumbnail,
+      startInput: startInput,
+      endInput: endInput,
+      waypointInputs: waypointInputs,
     );
   }
 }
