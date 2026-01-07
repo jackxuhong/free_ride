@@ -14,6 +14,7 @@ import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
 import 'package:free_ride/screens/device_setup_screen.dart';
+import 'package:free_ride/widgets/elevation_chart.dart';
 import 'package:free_ride/utils/constants.dart';
 
 class InputScreen extends StatefulWidget {
@@ -755,6 +756,31 @@ class _InputScreenState extends State<InputScreen> {
                                     ),
                                   ),
                                   Expanded(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        const Icon(Icons.trending_up, size: 28),
+                                        const SizedBox(width: 8),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              '${routeProvider.currentRoute!.elevationProfile.totalElevationGain.toStringAsFixed(0)} m',
+                                              style: const TextStyle(
+                                                fontSize: 16,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            const Text(
+                                              'Elevation',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  Expanded(
                                     child: FutureBuilder(
                                       future: _calculateEstimatedCalories(
                                         routeProvider.currentRoute!.geometry.totalDistance / 1000,
@@ -777,7 +803,7 @@ class _InputScreenState extends State<InputScreen> {
                                                   ),
                                                 ),
                                                 const Text(
-                                                  'Est. Calories',
+                                                  'Calories',
                                                   style: TextStyle(fontSize: 12),
                                                 ),
                                               ],
@@ -963,6 +989,20 @@ class _InputScreenState extends State<InputScreen> {
                         );
                         },
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Elevation chart
+                  Container(
+                    height: 120,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.grey),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: ElevationChart(
+                      route: routeProvider.currentRoute!,
+                      currentProgress: 0.0,
                     ),
                   ),
                 ],

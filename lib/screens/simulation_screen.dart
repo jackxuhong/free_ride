@@ -462,11 +462,13 @@ class _SimulationScreenState extends State<SimulationScreen> {
                           color: Colors.orange,
                         ),
                       ),
-                      if (rideProvider.currentHeartRate > 0)
+                      if (rideProvider.activeDevice != null)
                         Expanded(
                           child: _MetricCard(
                             label: 'Heart Rate',
-                            value: '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm',
+                            value: rideProvider.currentHeartRate > 0
+                                ? '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm'
+                                : '- bpm',
                             icon: Icons.favorite,
                             color: Colors.red,
                           ),
