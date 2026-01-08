@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 
 class DeviceConnectionWidget extends StatelessWidget {
-  final FTMSDevice? device;
+  final FitnessDevice? device;
   final bool isConnected;
 
   const DeviceConnectionWidget({

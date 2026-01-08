@@ -1,24 +1,24 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 import 'package:free_ride/services/device_storage_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/virtual_indoor_bike.dart';
-import 'package:free_ride/services/virtual_treadmill.dart';
 import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/device_factory.dart';
 
 class DeviceProvider extends ChangeNotifier {
   final DeviceStorageService _storage = DeviceStorageService();
+  final DeviceFactoryRegistry _factoryRegistry = DeviceFactoryRegistry();
 
-  FTMSDevice? _selectedDevice;
+  FitnessDevice? _selectedDevice;
   VirtualFitnessDevice? _activeDevice;
   bool _isScanning = false;
-  List<FTMSDevice> _availableDevices = [];
+  List<FitnessDevice> _availableDevices = [];
 
-  FTMSDevice? get selectedDevice => _selectedDevice;
+  FitnessDevice? get selectedDevice => _selectedDevice;
   VirtualFitnessDevice? get activeDevice => _activeDevice;
   bool get isScanning => _isScanning;
-  List<FTMSDevice> get availableDevices => _availableDevices;
+  List<FitnessDevice> get availableDevices => _availableDevices;
   bool get hasDeviceSelected => _selectedDevice != null;
 
   /// Initialize provider and load last used device
@@ -42,7 +42,7 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   /// Select a device
-  Future<void> selectDevice(FTMSDevice device) async {
+  Future<void> selectDevice(FitnessDevice device) async {
     // Dispose old active device if it exists
     if (_activeDevice != null && _selectedDevice?.id != device.id) {
       _activeDevice?.dispose();
@@ -61,23 +61,8 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   /// Create active device instance based on type
-  VirtualFitnessDevice _createActiveDevice(FTMSDevice device) {
-    if (device.isVirtual) {
-      // Create virtual device
-      if (device.deviceType == DeviceType.indoorBike) {
-        return VirtualIndoorBike(
-          targetSpeed: device.effortLevel,
-        );
-      } else {
-        return VirtualTreadmill(
-          userSpeed: device.effortLevel,
-        );
-      }
-    } else {
-      // Create FTMS service for real device (don't connect yet)
-      // Connection will be initiated when ride starts
-      return FTMSService(device: device);
-    }
+  VirtualFitnessDevice _createActiveDevice(FitnessDevice device) {
+    return _factoryRegistry.createDevice(device);
   }
 
   /// Remove a device
@@ -142,7 +127,7 @@ class DeviceProvider extends ChangeNotifier {
       // Scan for FTMS devices with type detection
       final deviceInfoList = await FTMSService.scanForDevices();
       
-      // Convert to FTMSDevice models and save
+      // Convert to FitnessDevice models and save
       for (var deviceInfo in deviceInfoList) {
         final bleDevice = deviceInfo['device'] as BluetoothDevice;
         final deviceType = deviceInfo['deviceType'] as DeviceType;
@@ -150,7 +135,7 @@ class DeviceProvider extends ChangeNotifier {
         // Check if already saved
         final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
         if (existing == null) {
-          final device = FTMSDevice(
+          final device = FitnessDevice(
             id: bleDevice.remoteId.str,
             name: bleDevice.platformName.isNotEmpty ? bleDevice.platformName : 'FTMS Device',
             deviceType: DeviceType.indoorBike, // Default, will be determined on connect

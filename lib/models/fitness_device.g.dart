@@ -1,22 +1,22 @@
 // GENERATED CODE - DO NOT MODIFY BY HAND
 
-part of 'ftms_device.dart';
+part of 'fitness_device.dart';
 
 // **************************************************************************
 // TypeAdapterGenerator
 // **************************************************************************
 
-class FTMSDeviceAdapter extends TypeAdapter<FTMSDevice> {
+class FitnessDeviceAdapter extends TypeAdapter<FitnessDevice> {
   @override
   final int typeId = 8;
 
   @override
-  FTMSDevice read(BinaryReader reader) {
+  FitnessDevice read(BinaryReader reader) {
     final numOfFields = reader.readByte();
     final fields = <int, dynamic>{
       for (int i = 0; i < numOfFields; i++) reader.readByte(): reader.read(),
     };
-    return FTMSDevice(
+    return FitnessDevice(
       id: fields[0] as String,
       name: fields[1] as String,
       deviceType: fields[2] as DeviceType,
@@ -29,7 +29,7 @@ class FTMSDeviceAdapter extends TypeAdapter<FTMSDevice> {
   }
 
   @override
-  void write(BinaryWriter writer, FTMSDevice obj) {
+  void write(BinaryWriter writer, FitnessDevice obj) {
     writer
       ..writeByte(8)
       ..writeByte(0)
@@ -56,7 +56,7 @@ class FTMSDeviceAdapter extends TypeAdapter<FTMSDevice> {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is FTMSDeviceAdapter &&
+      other is FitnessDeviceAdapter &&
           runtimeType == other.runtimeType &&
           typeId == other.typeId;
 }

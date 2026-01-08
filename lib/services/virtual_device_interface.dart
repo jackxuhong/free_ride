@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 
 /// Abstract base class for all fitness devices (virtual and real FTMS)
 abstract class VirtualFitnessDevice {

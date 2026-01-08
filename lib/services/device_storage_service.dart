@@ -1,5 +1,5 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 import 'package:uuid/uuid.dart';
 
 class DeviceStorageService {
@@ -10,7 +10,7 @@ class DeviceStorageService {
   static const String _boxName = 'ftms_devices';
   static const String _lastUsedKey = 'last_used_device_id';
   
-  late Box<FTMSDevice> _devicesBox;
+  late Box<FitnessDevice> _devicesBox;
   late Box<dynamic> _settingsBox;
   bool _initialized = false;
 
@@ -22,14 +22,14 @@ class DeviceStorageService {
     
     // Register Hive adapters
     if (!Hive.isAdapterRegistered(8)) {
-      Hive.registerAdapter(FTMSDeviceAdapter());
+      Hive.registerAdapter(FitnessDeviceAdapter());
     }
     if (!Hive.isAdapterRegistered(9)) {
       Hive.registerAdapter(DeviceTypeAdapter());
     }
     
     // Open devices box
-    _devicesBox = await Hive.openBox<FTMSDevice>(_boxName);
+    _devicesBox = await Hive.openBox<FitnessDevice>(_boxName);
 
     // Create default virtual devices if this is first launch
     if (_devicesBox.isEmpty) {
@@ -44,7 +44,7 @@ class DeviceStorageService {
     final uuid = const Uuid();
 
     // Virtual Bike
-    final virtualBike = FTMSDevice(
+    final virtualBike = FitnessDevice(
       id: uuid.v4(),
       name: 'Virtual Bike',
       deviceType: DeviceType.indoorBike,
@@ -54,7 +54,7 @@ class DeviceStorageService {
     );
 
     // Virtual Treadmill
-    final virtualTreadmill = FTMSDevice(
+    final virtualTreadmill = FitnessDevice(
       id: uuid.v4(),
       name: 'Virtual Treadmill',
       deviceType: DeviceType.treadmill,
@@ -68,17 +68,17 @@ class DeviceStorageService {
   }
 
   /// Get all saved devices
-  List<FTMSDevice> getAllDevices() {
+  List<FitnessDevice> getAllDevices() {
     return _devicesBox.values.toList();
   }
 
   /// Get device by ID
-  FTMSDevice? getDevice(String id) {
+  FitnessDevice? getDevice(String id) {
     return _devicesBox.get(id);
   }
 
   /// Save or update a device
-  Future<void> saveDevice(FTMSDevice device) async {
+  Future<void> saveDevice(FitnessDevice device) async {
     await _devicesBox.put(device.id, device);
   }
 
@@ -108,7 +108,7 @@ class DeviceStorageService {
   }
 
   /// Get last used device
-  FTMSDevice? getLastUsedDevice() {
+  FitnessDevice? getLastUsedDevice() {
     final lastUsedId = getLastUsedDeviceId();
     if (lastUsedId == null) return null;
     return getDevice(lastUsedId);

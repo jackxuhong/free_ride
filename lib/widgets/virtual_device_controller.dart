@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
 
 class VirtualDeviceController extends StatefulWidget {
-  final FTMSDevice device;
+  final FitnessDevice device;
 
   const VirtualDeviceController({
     super.key,

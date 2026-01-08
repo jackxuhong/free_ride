@@ -1,9 +1,18 @@
 import 'package:hive/hive.dart';
 
-part 'ftms_device.g.dart';
+part 'fitness_device.g.dart';
+
+/// Device types supported by the app
+@HiveType(typeId: 9)
+enum DeviceType {
+  @HiveField(0)
+  indoorBike,
+  @HiveField(1)
+  treadmill,
+}
 
 @HiveType(typeId: 8)
-class FTMSDevice extends HiveObject {
+class FitnessDevice extends HiveObject {
   @HiveField(0)
   String id;
 
@@ -28,7 +37,7 @@ class FTMSDevice extends HiveObject {
   @HiveField(7)
   double controllableParam; // For bikes: resistance (1-20), for treadmills: incline (-3 to 15)
 
-  FTMSDevice({
+  FitnessDevice({
     required this.id,
     required this.name,
     required this.deviceType,
@@ -43,7 +52,7 @@ class FTMSDevice extends HiveObject {
   String get displayName => isVirtual ? '$name (Virtual)' : name;
 
   /// Copy method for updates
-  FTMSDevice copyWith({
+  FitnessDevice copyWith({
     String? id,
     String? name,
     DeviceType? deviceType,
@@ -53,7 +62,7 @@ class FTMSDevice extends HiveObject {
     double? effortLevel,
     double? controllableParam,
   }) {
-    return FTMSDevice(
+    return FitnessDevice(
       id: id ?? this.id,
       name: name ?? this.name,
       deviceType: deviceType ?? this.deviceType,
@@ -64,13 +73,9 @@ class FTMSDevice extends HiveObject {
       controllableParam: controllableParam ?? this.controllableParam,
     );
   }
-}
 
-@HiveType(typeId: 9)
-enum DeviceType {
-  @HiveField(0)
-  indoorBike,
-
-  @HiveField(1)
-  treadmill,
+  @override
+  String toString() {
+    return 'FitnessDevice(id: $id, name: $name, type: $deviceType, virtual: $isVirtual)';
+  }
 }

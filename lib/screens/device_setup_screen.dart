@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/fitness_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/widgets/virtual_device_controller.dart';
@@ -251,7 +251,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     );
   }
   
-  void _confirmDeleteDevice(BuildContext context, FTMSDevice device) {
+  void _confirmDeleteDevice(BuildContext context, FitnessDevice device) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
