@@ -1,84 +1,54 @@
 import 'package:hive_flutter/hive_flutter.dart';
-import 'package:free_ride/models/ftms_device.dart';
-import 'package:uuid/uuid.dart';
+import 'package:free_ride/models/saved_device.dart';
 
 class DeviceStorageService {
   static final DeviceStorageService _instance = DeviceStorageService._internal();
   factory DeviceStorageService() => _instance;
   DeviceStorageService._internal();
 
-  static const String _boxName = 'ftms_devices';
+  static const String _boxName = 'saved_devices';
   static const String _lastUsedKey = 'last_used_device_id';
   
-  late Box<FTMSDevice> _devicesBox;
+  late Box<SavedDevice> _devicesBox;
   late Box<dynamic> _settingsBox;
   bool _initialized = false;
 
-  /// Initialize the service and create default virtual devices
+  /// Initialize the service
   Future<void> init(Box<dynamic> settingsBox) async {
     if (_initialized) return;
 
     _settingsBox = settingsBox;
     
-    // Register Hive adapters
-    if (!Hive.isAdapterRegistered(8)) {
-      Hive.registerAdapter(FTMSDeviceAdapter());
-    }
-    if (!Hive.isAdapterRegistered(9)) {
-      Hive.registerAdapter(DeviceTypeAdapter());
+    // Register Hive adapter for SavedDevice
+    if (!Hive.isAdapterRegistered(4)) {
+      Hive.registerAdapter(SavedDeviceAdapter());
     }
     
     // Open devices box
-    _devicesBox = await Hive.openBox<FTMSDevice>(_boxName);
-
-    // Create default virtual devices if this is first launch
-    if (_devicesBox.isEmpty) {
-      await _createDefaultVirtualDevices();
-    }
+    _devicesBox = await Hive.openBox<SavedDevice>(_boxName);
 
     _initialized = true;
   }
 
-  /// Create two default virtual devices for testing
-  Future<void> _createDefaultVirtualDevices() async {
-    final uuid = const Uuid();
-
-    // Virtual Bike
-    final virtualBike = FTMSDevice(
-      id: uuid.v4(),
-      name: 'Virtual Bike',
-      deviceType: DeviceType.indoorBike,
-      isVirtual: true,
-      effortLevel: 25.0, // 25 km/h speed
-      controllableParam: 0.0, // Unused (route controls resistance)
-    );
-
-    // Virtual Treadmill
-    final virtualTreadmill = FTMSDevice(
-      id: uuid.v4(),
-      name: 'Virtual Treadmill',
-      deviceType: DeviceType.treadmill,
-      isVirtual: true,
-      effortLevel: 10.0, // 10 km/h speed
-      controllableParam: 0.0, // Unused (route controls incline)
-    );
-
-    await _devicesBox.put(virtualBike.id, virtualBike);
-    await _devicesBox.put(virtualTreadmill.id, virtualTreadmill);
-  }
-
   /// Get all saved devices
-  List<FTMSDevice> getAllDevices() {
+  List<SavedDevice> getAllDevices() {
     return _devicesBox.values.toList();
   }
 
+  /// Get devices filtered by adapter type
+  List<SavedDevice> getDevicesByAdapterType(String adapterType) {
+    return _devicesBox.values
+        .where((device) => device.adapterType == adapterType)
+        .toList();
+  }
+
   /// Get device by ID
-  FTMSDevice? getDevice(String id) {
+  SavedDevice? getDevice(String id) {
     return _devicesBox.get(id);
   }
 
   /// Save or update a device
-  Future<void> saveDevice(FTMSDevice device) async {
+  Future<void> saveDevice(SavedDevice device) async {
     await _devicesBox.put(device.id, device);
   }
 
@@ -89,6 +59,20 @@ class DeviceStorageService {
     // Clear last used if this was the last used device
     if (getLastUsedDeviceId() == id) {
       await clearLastUsedDevice();
+    }
+  }
+
+  /// Check if a device with the given address already exists
+  bool deviceExists(String address) {
+    return _devicesBox.values.any((device) => device.address == address);
+  }
+
+  /// Get device by Bluetooth address
+  SavedDevice? getDeviceByAddress(String address) {
+    try {
+      return _devicesBox.values.firstWhere((device) => device.address == address);
+    } catch (e) {
+      return null;
     }
   }
 
@@ -108,27 +92,10 @@ class DeviceStorageService {
   }
 
   /// Get last used device
-  FTMSDevice? getLastUsedDevice() {
+  SavedDevice? getLastUsedDevice() {
     final lastUsedId = getLastUsedDeviceId();
     if (lastUsedId == null) return null;
     return getDevice(lastUsedId);
-  }
-
-  /// Update device parameters (effort and controllable param)
-  Future<void> updateDeviceParameters(
-    String deviceId, {
-    double? effortLevel,
-    double? controllableParam,
-  }) async {
-    final device = getDevice(deviceId);
-    if (device == null) return;
-
-    final updated = device.copyWith(
-      effortLevel: effortLevel ?? device.effortLevel,
-      controllableParam: controllableParam ?? device.controllableParam,
-    );
-
-    await saveDevice(updated);
   }
 
   /// Update device last connected time
@@ -136,7 +103,30 @@ class DeviceStorageService {
     final device = getDevice(deviceId);
     if (device == null) return;
 
-    final updated = device.copyWith(lastConnected: DateTime.now());
-    await saveDevice(updated);
+    device.lastConnected = DateTime.now();
+    await saveDevice(device);
+  }
+
+  /// Update power calibration for a device
+  Future<void> updatePowerCalibration(String deviceId, double calibration) async {
+    final device = getDevice(deviceId);
+    if (device == null) return;
+
+    device.powerCalibration = calibration;
+    await saveDevice(device);
+  }
+
+  /// Update custom name for a device
+  Future<void> updateCustomName(String deviceId, String customName) async {
+    final device = getDevice(deviceId);
+    if (device == null) return;
+
+    device.customName = customName;
+    await saveDevice(device);
+  }
+
+  /// Clear all saved devices
+  Future<void> clearAll() async {
+    await _devicesBox.clear();
   }
 }

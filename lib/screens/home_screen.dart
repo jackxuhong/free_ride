@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:free_ride/screens/input_screen.dart';
 import 'package:free_ride/screens/history_screen.dart';
-import 'package:free_ride/screens/device_setup_screen.dart';
+import 'package:free_ride/screens/devices_screen.dart';
 import 'package:free_ride/screens/profile_screen.dart';
 import 'package:free_ride/services/profile_service.dart';
 
@@ -43,7 +43,7 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Widget> get _screens => [
         const InputScreen(),
         HistoryScreenRefresh(key: _historyKey),
-        const DeviceSetupScreen(),
+        const DevicesScreen(),
         ProfileScreen(onProfileSaved: _onProfileSaved),
       ];
 

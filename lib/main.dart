@@ -6,6 +6,7 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/device_storage_service.dart';
+import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
@@ -20,6 +21,10 @@ void main() async {
   
   // Disable flutter_blue_plus verbose logging
   FlutterBluePlus.setLogLevel(LogLevel.error);
+
+  // Initialize Hive and register adapters
+  await Hive.initFlutter();
+  Hive.registerAdapter(SavedDeviceAdapter());
 
   // Initialize storage
   await RouteStorageService().init();

@@ -3,13 +3,12 @@ import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:free_ride/models/saved_route.dart';
+import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/models/ride_summary.dart';
-import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
-import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -52,13 +51,17 @@ class RideProvider with ChangeNotifier {
   List<PowerSample> _powerSamples = [];
 
   // Device tracking
-  VirtualFitnessDevice? _activeDevice;
+  DeviceAdapter? _primaryDevice;
+  DeviceAdapter? _hrDevice;
   double _currentCadence = 0.0;
   double _currentHeartRate = 0.0;
   List<double> _cadenceSamples = [];
   List<double> _heartRateSamples = [];
   double _workoutIntensity = 1.0;
-  StreamSubscription? _deviceConnectionSubscription;
+  StreamSubscription? _primaryConnectionSubscription;
+  StreamSubscription? _hrConnectionSubscription;
+  StreamSubscription? _primaryMetricsSubscription;
+  StreamSubscription? _hrMetricsSubscription;
   
   // Real-time calories tracking
   double _currentCalories = 0.0;
@@ -89,7 +92,9 @@ class RideProvider with ChangeNotifier {
   double get currentCadence => _currentCadence;
   double get currentHeartRate => _currentHeartRate;
   double get workoutIntensity => _workoutIntensity;
-  VirtualFitnessDevice? get activeDevice => _activeDevice;
+  DeviceAdapter? get activeDevice => _primaryDevice;
+  DeviceAdapter? get primaryDevice => _primaryDevice;
+  DeviceAdapter? get hrDevice => _hrDevice;
   double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
@@ -113,7 +118,9 @@ class RideProvider with ChangeNotifier {
   /// Initialize ride with a device (new method for device integration)
   void startRideWithDevice(
     SavedRoute route,
-    VirtualFitnessDevice device, {
+    DeviceAdapter primaryDevice,
+    SavedDevice primaryDeviceInfo, {
+    DeviceAdapter? hrDevice,
     Uint8List? thumbnail,
   }) async {
     _route = route;
@@ -125,37 +132,112 @@ class RideProvider with ChangeNotifier {
     final profile = await ProfileService().getProfile();
     _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
     
-    // Set device and intensity AFTER reset
-    _activeDevice = device;
+    // Set devices and intensity AFTER reset
+    _primaryDevice = primaryDevice;
+    _hrDevice = hrDevice;
     _workoutIntensity = 1.0;
-    
-    // Connect to device if it's a real FTMS device
-    if (device is FTMSService) {
-      final connected = await device.connect();
-      // Don't show error - auto-reconnect will handle connection issues
-      // if (!connected) {
-      //   print('Failed to connect to FTMS device');
-      // }
-      
-      // Listen to connection state for auto-pause/resume
-      _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
-        if (!isConnected && _status == RideStatus.running) {
-          // Auto-pause when device disconnects during ride
-          pauseRide();
-        } else if (isConnected && _status == RideStatus.paused) {
-          // Auto-resume when device reconnects (only if paused by disconnect)
-          resumeRide();
-        }
-      });
-    }
     
     // Set initial position
     _currentPosition = route.coordinates.start;
     _currentElevation = route.elevationProfile.elevations.first;
     
-    // Start the ride automatically
-    startRide();
+    notifyListeners();
     
+    // Connect to devices BEFORE starting ride
+    await _connectAndStartRide(primaryDeviceInfo);
+  }
+
+  /// Connect to devices and start ride once connected
+  Future<void> _connectAndStartRide(SavedDevice primaryDeviceInfo) async {
+    // Connect to primary device
+    final connectedPrimary = await _connectToPrimaryDevice(primaryDeviceInfo);
+    if (!connectedPrimary) {
+      // Failed to connect - don't start the ride
+      _status = RideStatus.notStarted;
+      notifyListeners();
+      throw Exception('Failed to connect to device. Please ensure device is powered on and nearby.');
+    }
+    
+    // Connect to HR device if provided
+    if (_hrDevice != null) {
+      await _connectToHRDevice(primaryDeviceInfo); // Use same device info for now
+    }
+    
+    // Start the ride timer after successful connection
+    startRide();
+  }
+
+  /// Connect to primary device and set up subscriptions
+  Future<bool> _connectToPrimaryDevice(SavedDevice deviceInfo) async {
+    if (_primaryDevice == null) return false;
+
+    // Actually connect the device adapter
+    // For virtual devices, this always succeeds
+    // For real devices, this attempts to connect to the BluetoothDevice
+    final connected = await _primaryDevice!.connect(deviceInfo);
+    
+    if (!connected) {
+      return false;
+    }
+    
+    // Listen to connection state for auto-pause/resume
+    _primaryConnectionSubscription = _primaryDevice!.connectionStateStream.listen((isConnected) {
+      if (!isConnected && _status == RideStatus.running) {
+        pauseRide();
+      } else if (isConnected && _status == RideStatus.paused) {
+        resumeRide();
+      }
+    });
+    
+    // Subscribe to metrics
+    _primaryMetricsSubscription = _primaryDevice!.metricsStream.listen((metrics) {
+      _handlePrimaryMetrics(metrics);
+    });
+    
+    return true;
+  }
+
+  /// Connect to HR device and set up subscriptions
+  Future<bool> _connectToHRDevice(SavedDevice deviceInfo) async {
+    if (_hrDevice == null) return false;
+    
+    // Actually connect the HR device
+    final connected = await _hrDevice!.connect(deviceInfo);
+    
+    if (!connected) {
+      return false;
+    }
+    
+    // Subscribe to HR metrics
+    _hrMetricsSubscription = _hrDevice!.metricsStream.listen((metrics) {
+      if (metrics.heartRate != null) {
+        _currentHeartRate = metrics.heartRate!.toDouble();
+        _heartRateSamples.add(_currentHeartRate);
+        notifyListeners();
+      }
+    });
+    
+    return true;
+  }
+
+  /// Handle metrics from primary device
+  void _handlePrimaryMetrics(DeviceMetrics metrics) {
+    if (metrics.speed != null) _currentSpeed = metrics.speed!;
+    if (metrics.cadence != null) {
+      _currentCadence = metrics.cadence!;
+      _cadenceSamples.add(_currentCadence);
+    }
+    if (metrics.power != null) {
+      _powerSamples.add(PowerSample(
+        timestamp: DateTime.now(),
+        power: metrics.power!.toDouble(),
+      ));
+    }
+    // Use HR from primary device only if no dedicated HR monitor
+    if (metrics.heartRate != null && _hrDevice == null) {
+      _currentHeartRate = metrics.heartRate!.toDouble();
+      _heartRateSamples.add(_currentHeartRate);
+    }
     notifyListeners();
   }
 
@@ -219,10 +301,8 @@ class RideProvider with ChangeNotifier {
     _endTime = DateTime.now();
     _simulationTimer?.cancel();
     
-    // Disconnect device if it's a real FTMS device
-    if (_activeDevice is FTMSService) {
-      await (_activeDevice as FTMSService).disconnect();
-    }
+    // Disconnect devices
+    await _disconnectDevices();
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
@@ -278,6 +358,9 @@ class RideProvider with ChangeNotifier {
     // Cancel timer first to prevent race conditions
     _simulationTimer?.cancel();
     _simulationTimer = null;
+    
+    // Disconnect devices
+    await _disconnectDevices();
     
     _status = RideStatus.completed;
     _endTime = DateTime.now();
@@ -352,60 +435,38 @@ class RideProvider with ChangeNotifier {
       _currentGrade = _route!.elevationProfile.grades[_currentSegmentIndex];
     }
 
-    // If we have an active device, use it for metrics
-    if (_activeDevice != null) {
-      // Simulate device with current conditions
-      final deviceData = _activeDevice!.simulate(
-        deltaTime: deltaTime,
-        routeGrade: _currentGrade,
-        intensityMultiplier: _workoutIntensity,
-      );
-
-      // For real devices (FTMS), use device speed directly, don't calculate
-      // For virtual devices, speed should always be available from simulate()
-      _currentSpeed = deviceData.speed ?? 0.0;
-
-      // Update device-specific metrics
-      if (deviceData.cadenceOrPace != null) {
-        _currentCadence = deviceData.cadenceOrPace!;
-        _cadenceSamples.add(_currentCadence);
-      }
-      if (deviceData.heartRate != null) {
-        _currentHeartRate = deviceData.heartRate!.toDouble();
-        _heartRateSamples.add(_currentHeartRate);
-      }
-
-      // Send control commands to device based on route grade and intensity
-      final isBike = _activeDevice is FTMSService 
-          ? (_activeDevice as FTMSService).deviceType == DeviceType.indoorBike
-          : _activeDevice.runtimeType.toString().contains('Bike');
+    // If we have an active device, use metrics from stream
+    if (_primaryDevice != null) {
+      // Metrics are already being updated by _handlePrimaryMetrics from the stream
+      // Just send control commands based on route grade and intensity
+      
+      final isBike = _primaryDevice!.deviceType == DeviceType.bike;
       
       if (isBike) {
         // Map grade percentage to resistance and apply intensity multiplier
         // Grade is stored as decimal (0.05 = 5%), convert to percentage first
         final gradePercent = _currentGrade * 100;
-        // Get device resistance range (default 1-20 if not FTMS)
-        final minRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).minResistance.toDouble() : 1.0;
-        final maxRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).maxResistance.toDouble() : 20.0;
-        // Map -5% to 15% grade range to device resistance range
+        // Map -5% to 15% grade range to resistance range (1-32 for Echelon, device-specific for FTMS)
         // 0% = 25% of range, scaling factor based on range
-        final rangeSize = maxRes - minRes;
-        final baseResistance = (gradePercent * (rangeSize / 20.0) + minRes + (rangeSize * 0.25)).clamp(minRes, maxRes);
-        final adjustedResistance = (baseResistance * _workoutIntensity).clamp(minRes, maxRes).round();
-        _activeDevice!.sendControlCommand(SetResistance(adjustedResistance));
+        final rangeSize = 31.0; // Assume max 32 resistance levels for most devices
+        final baseResistance = (gradePercent * (rangeSize / 20.0) + 1.0 + (rangeSize * 0.25)).clamp(1.0, 32.0);
+        final adjustedResistance = (baseResistance * _workoutIntensity).clamp(1.0, 32.0).round();
+        _primaryDevice!.setResistance(adjustedResistance);
       } else {
-        // Map grade to incline percentage and apply intensity multiplier
+        // Treadmill: map grade to incline percentage and apply intensity multiplier
         final baseIncline = (_currentGrade * 100).clamp(-3.0, 15.0);
         final adjustedIncline = (baseIncline * _workoutIntensity).clamp(-3.0, 15.0);
-        _activeDevice!.sendControlCommand(SetIncline(adjustedIncline));
+        _primaryDevice!.setResistance(adjustedIncline.round());
       }
 
-      // Use device power if available
-      if (deviceData.power != null) {
-        _powerSamples.add(PowerSample(
-          power: deviceData.power!,
-          timestamp: DateTime.now(),
-        ));
+      // Add current cadence to samples if available
+      if (_currentCadence > 0) {
+        _cadenceSamples.add(_currentCadence);
+      }
+      
+      // Add current heart rate to samples if available
+      if (_currentHeartRate > 0) {
+        _heartRateSamples.add(_currentHeartRate);
       }
     } else {
       // No device - use calculated speed
@@ -609,6 +670,22 @@ class RideProvider with ChangeNotifier {
     );
   }
 
+  /// Disconnect devices and clean up subscriptions
+  Future<void> _disconnectDevices() async {
+    await _primaryConnectionSubscription?.cancel();
+    await _hrConnectionSubscription?.cancel();
+    await _primaryMetricsSubscription?.cancel();
+    await _hrMetricsSubscription?.cancel();
+    _primaryConnectionSubscription = null;
+    _hrConnectionSubscription = null;
+    _primaryMetricsSubscription = null;
+    _hrMetricsSubscription = null;
+    await _primaryDevice?.disconnect();
+    await _hrDevice?.disconnect();
+    _primaryDevice = null;
+    _hrDevice = null;
+  }
+
   /// Reset all metrics
   void _resetMetrics() {
     _currentSegmentIndex = 0;
@@ -636,7 +713,6 @@ class RideProvider with ChangeNotifier {
     _cadenceSamples = [];
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
-    _activeDevice = null;
     _currentCalories = 0.0;
     _totalElevationGained = 0.0;
   }

@@ -5,7 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
@@ -230,11 +230,11 @@ class _SimulationScreenState extends State<SimulationScreen> {
       ),
       body: Column(
         children: [
-          // Connection status banner for FTMS devices
-          if (rideProvider.activeDevice is FTMSService)
+          // Connection status banner for real devices
+          if (rideProvider.activeDevice != null)
             StreamBuilder<bool>(
-              stream: (rideProvider.activeDevice as FTMSService).connectionState,
-              initialData: (rideProvider.activeDevice as FTMSService).isConnected,
+              stream: rideProvider.activeDevice!.connectionStateStream,
+              initialData: rideProvider.activeDevice!.isConnected,
               builder: (context, snapshot) {
                 final isConnected = snapshot.data ?? false;
                 if (isConnected) return const SizedBox.shrink();
@@ -328,7 +328,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
                             child: Transform.rotate(
                               angle: _isNavigationMode ? rideProvider.currentBearing * (3.14159265359 / 180) : 0,
                               child: Icon(
-                                rideProvider.activeDevice?.deviceType.name == 'treadmill'
+                                rideProvider.activeDevice?.deviceType == DeviceType.treadmill
                                     ? Icons.directions_run
                                     : Icons.directions_bike,
                                 size: 40,

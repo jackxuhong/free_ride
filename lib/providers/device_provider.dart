@@ -1,30 +1,69 @@
 import 'package:flutter/foundation.dart';
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/services/device_storage_service.dart';
-import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/virtual_indoor_bike.dart';
-import 'package:free_ride/services/virtual_treadmill.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/device_adapter.dart';
+import 'package:free_ride/services/device_factory.dart';
 
 class DeviceProvider extends ChangeNotifier {
   final DeviceStorageService _storage = DeviceStorageService();
 
-  FTMSDevice? _selectedDevice;
-  VirtualFitnessDevice? _activeDevice;
-  bool _isScanning = false;
-  List<FTMSDevice> _availableDevices = [];
+  SavedDevice? _selectedPrimaryDevice;
+  SavedDevice? _selectedHRDevice;
+  DeviceAdapter? _primaryAdapter;
+  DeviceAdapter? _hrAdapter;
+  List<SavedDevice> _availableDevices = [];
 
-  FTMSDevice? get selectedDevice => _selectedDevice;
-  VirtualFitnessDevice? get activeDevice => _activeDevice;
-  bool get isScanning => _isScanning;
-  List<FTMSDevice> get availableDevices => _availableDevices;
-  bool get hasDeviceSelected => _selectedDevice != null;
+  SavedDevice? get selectedDevice => _selectedPrimaryDevice;
+  SavedDevice? get selectedPrimaryDevice => _selectedPrimaryDevice;
+  SavedDevice? get selectedHRDevice => _selectedHRDevice;
+  DeviceAdapter? get activeDevice => _primaryAdapter;
+  DeviceAdapter? get primaryAdapter => _primaryAdapter;
+  DeviceAdapter? get hrAdapter => _hrAdapter;
+  List<SavedDevice> get availableDevices => _availableDevices;
+  bool get hasDeviceSelected => _selectedPrimaryDevice != null;
 
   /// Initialize provider and load last used device
   Future<void> init() async {
+    await _ensureVirtualDevices();
     await _loadDevices();
     await _loadLastUsedDevice();
+  }
+
+  /// Ensure virtual devices always exist
+  Future<void> _ensureVirtualDevices() async {
+    final devices = _storage.getAllDevices();
+    
+    // Check if virtual bike exists
+    final hasVirtualBike = devices.any((d) => d.adapterType == 'virtual-bike');
+    if (!hasVirtualBike) {
+      final virtualBike = SavedDevice(
+        id: 'virtual-bike-default',
+        bluetoothName: 'Virtual Bike',
+        customName: 'Virtual Bike',
+        address: 'virtual-bike',
+        adapterType: 'virtual-bike',
+        deviceTypeString: 'bike',
+        powerCalibration: 30.0, // Using powerCalibration field to store speed
+        lastConnected: DateTime.now(),
+      );
+      await _storage.saveDevice(virtualBike);
+    }
+    
+    // Check if virtual treadmill exists
+    final hasVirtualTreadmill = devices.any((d) => d.adapterType == 'virtual-treadmill');
+    if (!hasVirtualTreadmill) {
+      final virtualTreadmill = SavedDevice(
+        id: 'virtual-treadmill-default',
+        bluetoothName: 'Virtual Treadmill',
+        customName: 'Virtual Treadmill',
+        address: 'virtual-treadmill',
+        adapterType: 'virtual-treadmill',
+        deviceTypeString: 'treadmill',
+        powerCalibration: 15.0, // Using powerCalibration field to store speed
+        lastConnected: DateTime.now(),
+      );
+      await _storage.saveDevice(virtualTreadmill);
+    }
   }
 
   /// Load all saved devices
@@ -41,58 +80,71 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  /// Select a device
-  Future<void> selectDevice(FTMSDevice device) async {
-    // Dispose old active device if it exists
-    if (_activeDevice != null && _selectedDevice?.id != device.id) {
-      _activeDevice?.dispose();
-      _activeDevice = null;
+  /// Select a primary workout device (bike or treadmill)
+  Future<void> selectDevice(SavedDevice device) async {
+    // Only allow bike/treadmill as primary device
+    if (device.deviceType == DeviceType.heartRateMonitor) {
+      throw Exception('HR monitors must be selected as secondary devices');
+    }
+
+    // Dispose old adapter if it exists
+    if (_primaryAdapter != null && _selectedPrimaryDevice?.id != device.id) {
+      _primaryAdapter?.dispose();
+      _primaryAdapter = null;
     }
     
-    _selectedDevice = device;
+    _selectedPrimaryDevice = device;
     await _storage.setLastUsedDeviceId(device.id);
     
-    // Only create new active device if we don't have one or device changed
-    if (_activeDevice == null) {
-      _activeDevice = _createActiveDevice(device);
+    // Create adapter (don't connect yet - connection happens on ride start)
+    if (_primaryAdapter == null) {
+      _primaryAdapter = DeviceFactory.createAdapter(device);
+    } else {
+      // Update calibration if adapter already exists
+      _primaryAdapter!.powerCalibration = device.powerCalibration;
     }
     
     notifyListeners();
   }
 
-  /// Create active device instance based on type
-  VirtualFitnessDevice _createActiveDevice(FTMSDevice device) {
-    if (device.isVirtual) {
-      // Create virtual device
-      if (device.deviceType == DeviceType.indoorBike) {
-        return VirtualIndoorBike(
-          targetSpeed: device.effortLevel,
-        );
-      } else {
-        return VirtualTreadmill(
-          userSpeed: device.effortLevel,
-        );
-      }
-    } else {
-      // Create FTMS service for real device (don't connect yet)
-      // Connection will be initiated when ride starts
-      return FTMSService(device: device);
+  /// Select a heart rate monitor as secondary device
+  Future<void> selectHRDevice(SavedDevice? device) async {
+    if (device != null && device.deviceType != DeviceType.heartRateMonitor) {
+      throw Exception('Only HR monitors can be selected as secondary devices');
     }
+
+    // Dispose old HR adapter if it exists
+    if (_hrAdapter != null) {
+      _hrAdapter?.dispose();
+      _hrAdapter = null;
+    }
+    
+    _selectedHRDevice = device;
+    
+    // Create HR adapter (don't connect yet)
+    if (device != null) {
+      _hrAdapter = DeviceFactory.createAdapter(device);
+    }
+    
+    notifyListeners();
   }
 
   /// Remove a device
   Future<void> removeDevice(String deviceId) async {
-    // Don't allow removing virtual devices
     final device = _storage.getDevice(deviceId);
-    if (device?.isVirtual == true) {
-      throw Exception('Cannot remove virtual devices');
+    if (device == null) return;
+    
+    // Dispose adapter if removing the selected device
+    if (_selectedPrimaryDevice?.id == deviceId) {
+      _primaryAdapter?.dispose();
+      _primaryAdapter = null;
+      _selectedPrimaryDevice = null;
     }
     
-    // Dispose active device if removing the selected one
-    if (_selectedDevice?.id == deviceId) {
-      _activeDevice?.dispose();
-      _activeDevice = null;
-      _selectedDevice = null;
+    if (_selectedHRDevice?.id == deviceId) {
+      _hrAdapter?.dispose();
+      _hrAdapter = null;
+      _selectedHRDevice = null;
     }
     
     await _storage.deleteDevice(deviceId);
@@ -100,94 +152,22 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Update virtual device parameters
-  Future<void> updateDeviceParameters({
-    required String deviceId,
-    double? effortLevel,
-    double? controllableParam,
-  }) async {
-    await _storage.updateDeviceParameters(
-      deviceId,
-      effortLevel: effortLevel,
-      controllableParam: controllableParam,
-    );
+  /// Update power calibration for a device
+  Future<void> updatePowerCalibration(String deviceId, double calibration) async {
+    await _storage.updatePowerCalibration(deviceId, calibration);
     
-    // Reload devices and update parameters for virtual devices only
+    // Update adapter if it's the currently selected device
+    if (_selectedPrimaryDevice?.id == deviceId && _primaryAdapter != null) {
+      _primaryAdapter!.powerCalibration = calibration;
+    }
+    
     await _loadDevices();
-    if (_selectedDevice?.id == deviceId) {
-      final device = _storage.getDevice(deviceId);
-      if (device != null) {
-        _selectedDevice = device;
-        
-        // Only recreate active device for virtual devices
-        // Real FTMS devices should maintain their connection
-        if (device.isVirtual && _activeDevice != null) {
-          _activeDevice?.dispose();
-          _activeDevice = _createActiveDevice(device);
-        }
-        
-        notifyListeners();
-      }
-    }
-  }
-
-  /// Start scanning for real FTMS devices
-  Future<void> startScan() async {
-    if (_isScanning) return;
-    
-    _isScanning = true;
-    notifyListeners();
-
-    try {
-      // Scan for FTMS devices with type detection
-      final deviceInfoList = await FTMSService.scanForDevices();
-      
-      // Convert to FTMSDevice models and save
-      for (var deviceInfo in deviceInfoList) {
-        final bleDevice = deviceInfo['device'] as BluetoothDevice;
-        final deviceType = deviceInfo['deviceType'] as DeviceType;
-        
-        // Check if already saved
-        final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
-        if (existing == null) {
-          final device = FTMSDevice(
-            id: bleDevice.remoteId.str,
-            name: bleDevice.platformName.isNotEmpty ? bleDevice.platformName : 'FTMS Device',
-            deviceType: DeviceType.indoorBike, // Default, will be determined on connect
-            isVirtual: false,
-            deviceAddress: bleDevice.remoteId.str,
-          );
-          await _storage.saveDevice(device);
-        }
-      }
-
-      await _loadDevices();
-    } catch (e) {
-      debugPrint('Error scanning: $e');
-    } finally {
-      _isScanning = false;
-      notifyListeners();
-    }
-  }
-
-  /// Stop scanning
-  Future<void> stopScan() async {
-    _isScanning = false;
     notifyListeners();
   }
 
   /// Delete a device
   Future<void> deleteDevice(String deviceId) async {
-    await _storage.deleteDevice(deviceId);
-    
-    // If deleted device was selected, clear selection
-    if (_selectedDevice?.id == deviceId) {
-      _selectedDevice = null;
-      _activeDevice?.dispose();
-      _activeDevice = null;
-    }
-    
-    await _loadDevices();
+    await removeDevice(deviceId);
   }
 
   /// Refresh devices list
@@ -197,7 +177,8 @@ class DeviceProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _activeDevice?.dispose();
+    _primaryAdapter?.dispose();
+    _hrAdapter?.dispose();
     super.dispose();
   }
 }

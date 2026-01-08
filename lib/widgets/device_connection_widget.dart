@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/services/device_adapter.dart';
 
 class DeviceConnectionWidget extends StatelessWidget {
-  final FTMSDevice? device;
+  final SavedDevice? device;
   final bool isConnected;
 
   const DeviceConnectionWidget({
@@ -31,29 +32,23 @@ class DeviceConnectionWidget extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            device!.deviceType == DeviceType.indoorBike
+            device!.deviceType == DeviceType.bike
                 ? Icons.directions_bike
-                : Icons.directions_run,
+                : device!.deviceType == DeviceType.treadmill
+                    ? Icons.directions_run
+                    : Icons.favorite,
             size: 16,
             color: isConnected ? Colors.green.shade700 : Colors.orange.shade700,
           ),
           const SizedBox(width: 6),
           Text(
-            device!.name,
+            device!.displayName,
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w500,
               color: isConnected ? Colors.green.shade700 : Colors.orange.shade700,
             ),
           ),
-          if (device!.isVirtual) ...[
-            const SizedBox(width: 4),
-            Icon(
-              Icons.computer,
-              size: 12,
-              color: isConnected ? Colors.green.shade700 : Colors.orange.shade700,
-            ),
-          ],
         ],
       ),
     );

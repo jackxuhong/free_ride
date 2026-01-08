@@ -18,8 +18,8 @@ class RouteStorageService {
   Future<void> init() async {
     if (_initialized) return;
 
-    await Hive.initFlutter();
-
+    // Note: Hive.initFlutter() is now called in main.dart before any service initialization
+    
     // Register adapters
     Hive.registerAdapter(DurationAdapter());
     Hive.registerAdapter(SavedRouteAdapter());

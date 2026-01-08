@@ -13,7 +13,7 @@ import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
-import 'package:free_ride/screens/device_setup_screen.dart';
+import 'package:free_ride/screens/devices_screen.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
 import 'package:free_ride/utils/constants.dart';
 
@@ -390,6 +390,7 @@ class _InputScreenState extends State<InputScreen> {
       context.read<RideProvider>().startRideWithDevice(
         routeProvider.currentRoute!,
         deviceProvider.activeDevice!,
+        deviceProvider.selectedDevice!,  // Pass SavedDevice info
         thumbnail: thumbnail,
       );
       
@@ -828,7 +829,7 @@ class _InputScreenState extends State<InputScreen> {
                                         Navigator.push(
                                           context,
                                           MaterialPageRoute(
-                                            builder: (context) => const DeviceSetupScreen(),
+                                            builder: (context) => const DevicesScreen(),
                                           ),
                                         );
                                       },
@@ -855,7 +856,7 @@ class _InputScreenState extends State<InputScreen> {
                                                 crossAxisAlignment: CrossAxisAlignment.start,
                                                 children: [
                                                   Text(
-                                                    device?.name ?? 'No device',
+                                                    device?.displayName ?? 'No device',
                                                     style: const TextStyle(
                                                       fontSize: 14,
                                                       fontWeight: FontWeight.bold,
@@ -863,7 +864,7 @@ class _InputScreenState extends State<InputScreen> {
                                                   ),
                                                   Text(
                                                     device != null
-                                                        ? (device.isVirtual ? 'Virtual' : 'Bluetooth')
+                                                        ? device.adapterType.toUpperCase()
                                                         : 'Tap to select',
                                                     style: TextStyle(
                                                       fontSize: 12,
