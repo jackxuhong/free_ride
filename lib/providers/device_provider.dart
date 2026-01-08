@@ -37,7 +37,7 @@ class DeviceProvider extends ChangeNotifier {
   /// Select a device
   Future<void> selectDevice(FitnessDevice device) async {
     // Dispose old active device if it exists
-    if (_activeDevice != null && _selectedDevice?.id != device.id) {
+    if (_activeDevice != null) {
       _activeDevice?.dispose();
       _activeDevice = null;
     }
@@ -45,10 +45,8 @@ class DeviceProvider extends ChangeNotifier {
     _selectedDevice = device;
     await _storage.setLastUsedDeviceId(device.id);
     
-    // Only create new active device if we don't have one or device changed
-    if (_activeDevice == null) {
-      _activeDevice = _createActiveDevice(device);
-    }
+    // Always create new active device to ensure correct protocol identification
+    _activeDevice = _createActiveDevice(device);
     
     notifyListeners();
   }

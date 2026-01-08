@@ -63,7 +63,9 @@ class FTMSService extends VirtualFitnessDevice {
 
   /// Connect to the device
   Future<bool> connect() async {
+    print('FTMSService: Starting connection to ${device.name}');
     final success = await _connectionManager.connect();
+    print('FTMSService: Connection result: $success');
     if (success) {
       // Update command sender with the control characteristic
       _commandSender = FTMSCommandSender(
@@ -71,6 +73,9 @@ class FTMSService extends VirtualFitnessDevice {
         minResistance: _connectionManager.minResistance,
         maxResistance: _connectionManager.maxResistance,
       );
+      print('FTMSService: Command sender updated with characteristics');
+    } else {
+      print('FTMSService: Connection failed');
     }
     return success;
   }

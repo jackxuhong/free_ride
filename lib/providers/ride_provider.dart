@@ -10,6 +10,7 @@ import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
 import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/echelon_service.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -129,21 +130,22 @@ class RideProvider with ChangeNotifier {
     _activeDevice = device;
     _workoutIntensity = 1.0;
     
-    // Connect to device if it's a real FTMS device
-    if (device is FTMSService) {
+    // Connect to device if it's a real fitness device
+    if (device is FTMSService || device is EchelonService) {
+      print('RideProvider: Connecting to ${device.runtimeType}...');
       final connected = await device.connect();
-      // Don't show error - auto-reconnect will handle connection issues
-      // if (!connected) {
-      //   print('Failed to connect to FTMS device');
-      // }
+      print('RideProvider: Connection result: $connected');
       
       // Listen to connection state for auto-pause/resume
       _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
+        print('RideProvider: Device connection state changed: $isConnected');
         if (!isConnected && _status == RideStatus.running) {
           // Auto-pause when device disconnects during ride
+          print('RideProvider: Auto-pausing due to device disconnection');
           pauseRide();
         } else if (isConnected && _status == RideStatus.paused) {
           // Auto-resume when device reconnects (only if paused by disconnect)
+          print('RideProvider: Auto-resuming due to device reconnection');
           resumeRide();
         }
       });

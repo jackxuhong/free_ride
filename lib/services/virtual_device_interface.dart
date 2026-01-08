@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
 import 'package:free_ride/models/fitness_device.dart';
@@ -6,6 +7,18 @@ import 'package:free_ride/models/fitness_device.dart';
 abstract class VirtualFitnessDevice {
   /// Device type
   DeviceType get deviceType;
+
+  /// Connect to the device (for real devices)
+  Future<bool> connect() async => true;
+
+  /// Disconnect from the device (for real devices)
+  Future<void> disconnect() async {}
+
+  /// Connection state stream (for real devices)
+  Stream<bool> get connectionState => Stream.value(true);
+
+  /// Current connection state
+  bool get isConnected => true;
 
   /// Update device input parameters
   /// For bikes: effortLevel = user effort (0-100%), controllableParam = resistance

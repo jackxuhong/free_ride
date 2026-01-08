@@ -77,10 +77,12 @@ class DeviceFactoryRegistry {
     DeviceProtocol protocol;
     if (config.isVirtual) {
       protocol = DeviceProtocol.virtual;
-    } else if (config.name.toLowerCase().contains('echelon')) {
+    } else if (config.name.toLowerCase().startsWith('ech')) {
       protocol = DeviceProtocol.echelonBluetooth;
+      print('DeviceFactoryRegistry: Identified ${config.name} as ECHELON (starts with ECH)');
     } else {
       protocol = DeviceProtocol.ftmsBluetooth;
+      print('DeviceFactoryRegistry: Identified ${config.name} as FTMS (default)');
     }
 
     final factory = _factories[protocol];

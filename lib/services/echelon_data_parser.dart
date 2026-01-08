@@ -3,6 +3,8 @@ import 'package:free_ride/models/device_data_snapshot.dart';
 
 /// Parses data packets from Echelon Connect Sport devices
 class EchelonDataParser {
+  static int _lastResistance = 1; // Track last known resistance level
+
   /// Parse raw data packet from Echelon device
   static DeviceDataSnapshot parseData(List<int> rawData) {
     if (rawData.isEmpty) {
@@ -11,37 +13,42 @@ class EchelonDataParser {
 
     final data = Uint8List.fromList(rawData);
 
-    // Echelon Connect Sport data packet structure (based on C++ implementation)
-    // Packet format appears to be: [header, data1, data2, ..., checksum]
-
-    if (data.length < 8) {
-      return DeviceDataSnapshot();
-    }
-
-    try {
-      // Parse speed (km/h) - typically at positions 5-6
-      final speedRaw = (data[5] << 8) | data[6];
-      final speed = speedRaw / 100.0; // Convert to km/h
-
-      // Parse cadence (rpm) - typically at positions 7-8
-      final cadenceRaw = (data[7] << 8) | data[8];
-      final cadence = cadenceRaw / 10.0; // Convert to rpm
-
-      // Parse power (watts) - calculated from resistance and cadence
-      // Echelon provides resistance level, power needs to be calculated
-      final resistance = data[3]; // Resistance level
-      final power = _calculatePowerFromResistance(resistance, cadence);
-
+    // Handle different packet types based on C++ implementation
+    if (data.length == 5 && data[0] == 0xf0 && data[1] == 0xd2) {
+      // Resistance update packet: [0xf0, 0xd2, ?, resistance, ?]
+      final resistance = data[3];
+      _lastResistance = resistance;
       return DeviceDataSnapshot(
-        speed: speed,
-        cadenceOrPace: cadence,
-        power: power,
         controllableParam: resistance.toDouble(),
       );
-    } catch (e) {
-      // Return default snapshot if parsing fails
-      return DeviceDataSnapshot();
     }
+
+    if (data.length == 13) {
+      // Main data packet (13 bytes)
+      try {
+        // Cadence (rpm) - byte 10
+        final cadence = data[10].toDouble();
+
+        // Speed calculation: 0.37497622 * cadence (from C++ code)
+        final speed = 0.37497622 * cadence;
+
+        // Power calculation from resistance and cadence
+        final power = _calculatePowerFromResistance(_lastResistance, cadence);
+
+        return DeviceDataSnapshot(
+          speed: speed,
+          cadenceOrPace: cadence,
+          power: power,
+          controllableParam: _lastResistance.toDouble(),
+        );
+      } catch (e) {
+        print('Error parsing Echelon data packet: $e');
+        return DeviceDataSnapshot();
+      }
+    }
+
+    // Unknown packet format
+    return DeviceDataSnapshot();
   }
 
   /// Calculate power from resistance level and cadence

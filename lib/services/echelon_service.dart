@@ -60,7 +60,9 @@ class EchelonService extends VirtualFitnessDevice {
 
   /// Connect to the device
   Future<bool> connect() async {
+    print('EchelonService: Starting connection to ${device.name}');
     final success = await _connectionManager.connect();
+    print('EchelonService: Connection result: $success');
     if (success) {
       // Update command sender with the control characteristic
       _commandSender = EchelonCommandSender(
@@ -68,6 +70,9 @@ class EchelonService extends VirtualFitnessDevice {
         minResistance: _connectionManager.minResistance,
         maxResistance: _connectionManager.maxResistance,
       );
+      print('EchelonService: Command sender updated with characteristics');
+    } else {
+      print('EchelonService: Connection failed');
     }
     return success;
   }

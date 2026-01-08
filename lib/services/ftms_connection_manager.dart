@@ -80,43 +80,63 @@ class FTMSConnectionManager {
   Future<bool> connect() async {
     try {
       if (device.deviceAddress == null) {
-        // print('Cannot connect: device address is null');
+        print('FTMSConnectionManager: No device address available');
         return false;
       }
 
-      // print('Attempting to connect to device: ${device.name}');
+      print('FTMSConnectionManager: Connecting to device ${device.name} at ${device.deviceAddress}');
 
       // Get all connected and available devices
       final connectedDevices = FlutterBluePlus.connectedDevices;
+      print('FTMSConnectionManager: Found ${connectedDevices.length} already connected devices');
       _connectedDevice = connectedDevices.firstWhere(
         (d) => d.remoteId.toString() == device.deviceAddress,
-        orElse: () => BluetoothDevice(remoteId: DeviceIdentifier(device.deviceAddress!)),
+        orElse: () {
+          print('FTMSConnectionManager: Creating new BluetoothDevice for ${device.deviceAddress}');
+          return BluetoothDevice(remoteId: DeviceIdentifier(device.deviceAddress!));
+        },
       );
 
       // Check current connection state
       final connectionState = await _connectedDevice!.connectionState.first;
-      // print('Current connection state: $connectionState');
+      print('FTMSConnectionManager: Current connection state: $connectionState');
 
       // Connect if not already connected
-      if (connectionState == BluetoothConnectionState.disconnected) {
-        // print('Connecting to device...');
-        await _connectedDevice!.connect(timeout: const Duration(seconds: 15));
-        // print('Connected successfully');
+      if (connectionState != BluetoothConnectionState.connected) {
+        print('FTMSConnectionManager: Starting connection with 30s timeout...');
+        // Use extended timeout and connection parameters for fitness devices
+        final connectFuture = _connectedDevice!.connect(
+          timeout: const Duration(seconds: 30), // Extended timeout for fitness devices
+          autoConnect: false, // Manual connection control
+        );
+
+        // Also implement manual timeout as backup
+        final timeoutFuture = Future.delayed(const Duration(seconds: 35), () {
+          throw TimeoutException('Connection timeout after 35 seconds');
+        });
+
+        try {
+          await Future.any([connectFuture, timeoutFuture]);
+          print('FTMSConnectionManager: Connection completed successfully');
+        } catch (e) {
+          print('FTMSConnectionManager: Connection failed with error: $e');
+          rethrow;
+        }
       } else {
-        // print('Device already connected');
+        print('FTMSConnectionManager: Device already connected');
       }
 
       // Discover services
-      // print('Discovering services...');
+      print('FTMSConnectionManager: Discovering services...');
       final services = await _connectedDevice!.discoverServices();
-      // print('Found ${services.length} services');
+      print('FTMSConnectionManager: Found ${services.length} services');
 
       // Find FTMS service
       final ftmsService = services.firstWhere(
         (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
         orElse: () => throw Exception('FTMS service not found'),
       );
-      // print('Found FTMS service with ${ftmsService.characteristics.length} characteristics');
+      print('FTMSConnectionManager: Found FTMS service with ${ftmsService.characteristics.length} characteristics');
 
       // Read device capabilities for bikes
       if (deviceType == DeviceType.indoorBike) {
@@ -219,7 +239,7 @@ class FTMSConnectionManager {
 
       return true;
     } catch (e) {
-      // print('Error connecting to device: $e');
+      print('FTMSConnectionManager: Error connecting to device: $e');
       await disconnect();
 
       // Trigger auto-reconnect for initial connection failures
@@ -247,22 +267,26 @@ class FTMSConnectionManager {
   /// Attempt to reconnect to device
   Future<void> _attemptReconnect() async {
     if (_isReconnecting) return;
+
     _isReconnecting = true;
 
-    // Wait a bit before reconnecting
-    await Future.delayed(const Duration(seconds: 2));
-
-    if (!_isReconnecting) return; // Cancelled during wait
-
-    final success = await connect();
-    if (success) {
-      // print('Successfully reconnected to FTMS device');
+    // Wait longer before attempting reconnection for fitness devices
+    Future.delayed(const Duration(seconds: 5), () async {
       _isReconnecting = false;
-    } else {
-      // print('Reconnection failed, will retry...');
-      _isReconnecting = false;
-      // Will trigger again via connection state listener
-    }
+      if (!_isConnected && device.deviceAddress != null) {
+        print('FTMSConnectionManager: Attempting to reconnect...');
+        final success = await connect();
+        if (!success) {
+          print('FTMSConnectionManager: Reconnection failed, will retry in 10 seconds...');
+          // If reconnection fails, wait longer before next attempt
+          Future.delayed(const Duration(seconds: 10), () {
+            if (!_isConnected) {
+              _attemptReconnect(); // Try again
+            }
+          });
+        }
+      }
+    });
   }
 
   /// Dispose of resources
