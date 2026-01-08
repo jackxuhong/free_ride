@@ -3,8 +3,8 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/fitness_device.dart';
 import 'package:free_ride/services/device_storage_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/services/device_factory.dart';
+import 'package:free_ride/services/unified_device_discovery.dart';
 
 class DeviceProvider extends ChangeNotifier {
   final DeviceStorageService _storage = DeviceStorageService();
@@ -24,21 +24,14 @@ class DeviceProvider extends ChangeNotifier {
   /// Initialize provider and load last used device
   Future<void> init() async {
     await _loadDevices();
-    await _loadLastUsedDevice();
+    // Don't auto-select last used device during init to avoid BLE conflicts
+    // await _loadLastUsedDevice();
   }
 
   /// Load all saved devices
   Future<void> _loadDevices() async {
     _availableDevices = _storage.getAllDevices();
     notifyListeners();
-  }
-
-  /// Load and auto-select last used device
-  Future<void> _loadLastUsedDevice() async {
-    final lastUsed = _storage.getLastUsedDevice();
-    if (lastUsed != null) {
-      await selectDevice(lastUsed);
-    }
   }
 
   /// Select a device
@@ -118,27 +111,28 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Start scanning for real FTMS devices
   Future<void> startScan() async {
-    if (_isScanning) return;
-    
+    if (_isScanning || UnifiedDeviceDiscovery.isScanning || UnifiedDeviceDiscovery.isBleOperationInProgress) return;
+
     _isScanning = true;
     notifyListeners();
 
     try {
-      // Scan for FTMS devices with type detection
-      final deviceInfoList = await FTMSService.scanForDevices();
-      
+      // Scan for all supported fitness devices
+      final discovery = UnifiedDeviceDiscovery();
+      final deviceInfoList = await discovery.scanForDevices();
+
       // Convert to FitnessDevice models and save
       for (var deviceInfo in deviceInfoList) {
         final bleDevice = deviceInfo['device'] as BluetoothDevice;
         final deviceType = deviceInfo['deviceType'] as DeviceType;
-        
+
         // Check if already saved
         final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
         if (existing == null) {
           final device = FitnessDevice(
             id: bleDevice.remoteId.str,
-            name: bleDevice.platformName.isNotEmpty ? bleDevice.platformName : 'FTMS Device',
-            deviceType: DeviceType.indoorBike, // Default, will be determined on connect
+            name: deviceInfo['name'] as String,
+            deviceType: deviceType,
             isVirtual: false,
             deviceAddress: bleDevice.remoteId.str,
           );

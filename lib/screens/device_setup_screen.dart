@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:free_ride/models/fitness_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/services/ftms_service.dart';
@@ -188,6 +189,12 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
   void _startScan(BuildContext context) async {
     final deviceProvider = context.read<DeviceProvider>();
     
+    // Request necessary permissions first
+    final permissionsGranted = await _requestPermissions(context);
+    if (!permissionsGranted) {
+      return;
+    }
+    
     // Show scanning dialog with cancel button
     showDialog(
       context: context,
@@ -199,7 +206,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
           children: const [
             CircularProgressIndicator(),
             SizedBox(height: 16),
-            Text('Looking for FTMS devices...'),
+            Text('Looking for fitness devices...'),
           ],
         ),
         actions: [
@@ -227,6 +234,120 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
       }
     }
   }
+
+  Future<bool> _requestPermissions(BuildContext context) async {
+    try {
+      // Request location permission (required for Bluetooth scanning on iOS/Android)
+      var locationStatus = await Permission.location.status;
+      if (locationStatus.isDenied || locationStatus.isRestricted) {
+        locationStatus = await Permission.location.request();
+        if (locationStatus.isPermanentlyDenied) {
+          _showPermissionDeniedDialog(context, 'Location');
+          return false;
+        }
+      }
+
+      // Request Bluetooth permissions where available
+      try {
+        if (await Permission.bluetooth.isRestricted || await Permission.bluetooth.isDenied) {
+          final bluetoothStatus = await Permission.bluetooth.request();
+          if (bluetoothStatus.isPermanentlyDenied) {
+            _showPermissionDeniedDialog(context, 'Bluetooth');
+            return false;
+          }
+        }
+      } catch (e) {
+        // Bluetooth permission might not be available on all platforms
+        print('Bluetooth permission not available: $e');
+      }
+
+      // On Android, also request Bluetooth scan/connect permissions
+      try {
+        if (await Permission.bluetoothScan.isRestricted || await Permission.bluetoothScan.isDenied) {
+          final scanStatus = await Permission.bluetoothScan.request();
+          if (scanStatus.isPermanentlyDenied) {
+            _showPermissionDeniedDialog(context, 'Bluetooth Scan');
+            return false;
+          }
+        }
+      } catch (e) {
+        // Bluetooth scan permission might not be available on all platforms
+        print('Bluetooth scan permission not available: $e');
+      }
+
+      try {
+        if (await Permission.bluetoothConnect.isRestricted || await Permission.bluetoothConnect.isDenied) {
+          final connectStatus = await Permission.bluetoothConnect.request();
+          if (connectStatus.isPermanentlyDenied) {
+            _showPermissionDeniedDialog(context, 'Bluetooth Connect');
+            return false;
+          }
+        }
+      } catch (e) {
+        // Bluetooth connect permission might not be available on all platforms
+        print('Bluetooth connect permission not available: $e');
+      }
+
+      return true;
+    } catch (e) {
+      // If permission handling fails completely, show error but allow scan to proceed
+      // Only log in debug mode, don't print to console in production
+      if (e.toString().contains('MissingPluginException')) {
+        // This is expected during hot reload, don't show dialog
+        // Just allow scan to proceed
+      } else {
+        _showPermissionErrorDialog(context, e.toString());
+      }
+      return true; // Allow scan to proceed even if permissions fail
+    }
+  }
+
+  void _showPermissionErrorDialog(BuildContext context, String error) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission System Unavailable'),
+        content: Text(
+          'The permission system is not available right now.\n\n'
+          'Error: $error\n\n'
+          'Scanning will proceed, but you may need to grant permissions manually '
+          'in your device settings for Bluetooth to work properly.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showPermissionDeniedDialog(BuildContext context, String permissionType) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('$permissionType Permission Required'),
+        content: Text(
+          '$permissionType permission is required for Bluetooth device scanning.\n\n'
+          'Please go to your device settings and enable $permissionType permission for this app.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(context);
+              await openAppSettings();
+            },
+            child: const Text('Open Settings'),
+          ),
+        ],
+      ),
+    );
+  }
   
   void _showNoDevicesFound(BuildContext context) {
     showDialog(
@@ -234,7 +355,10 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
       builder: (context) => AlertDialog(
         title: const Text('No Devices Found'),
         content: const Text(
-          'No FTMS devices were found nearby.\n\n'
+          'No fitness devices were found nearby.\n\n'
+          'Supported devices include:\n'
+          '• FTMS compatible equipment\n'
+          '• Echelon Connect Sport bikes\n\n'
           'Make sure your device is:\n'
           '• Turned on\n'
           '• In pairing mode\n'

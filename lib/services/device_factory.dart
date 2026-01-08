@@ -1,4 +1,5 @@
 import 'package:free_ride/models/fitness_device.dart';
+import 'package:free_ride/services/echelon_service.dart';
 import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
 import 'package:free_ride/services/virtual_indoor_bike.dart';
@@ -7,6 +8,7 @@ import 'package:free_ride/services/virtual_treadmill.dart';
 /// Protocol types for device communication
 enum DeviceProtocol {
   ftmsBluetooth,
+  echelonBluetooth,
   virtual,
   // Future: wifi, antPlus, etc.
 }
@@ -25,6 +27,17 @@ class FTMSDeviceFactory implements DeviceFactory {
   @override
   VirtualFitnessDevice createDevice(FitnessDevice config) {
     return FTMSService(device: config);
+  }
+}
+
+/// Factory for Echelon Bluetooth devices
+class EchelonDeviceFactory implements DeviceFactory {
+  @override
+  DeviceProtocol get protocol => DeviceProtocol.echelonBluetooth;
+
+  @override
+  VirtualFitnessDevice createDevice(FitnessDevice config) {
+    return EchelonService(device: config);
   }
 }
 
@@ -50,6 +63,7 @@ class DeviceFactoryRegistry {
   DeviceFactoryRegistry() {
     // Register default factories
     registerFactory(DeviceProtocol.ftmsBluetooth, FTMSDeviceFactory());
+    registerFactory(DeviceProtocol.echelonBluetooth, EchelonDeviceFactory());
     registerFactory(DeviceProtocol.virtual, VirtualDeviceFactory());
   }
 
@@ -60,7 +74,15 @@ class DeviceFactoryRegistry {
   VirtualFitnessDevice createDevice(FitnessDevice config) {
     // For now, determine protocol from device properties
     // In future, config will have explicit protocol field
-    final protocol = config.isVirtual ? DeviceProtocol.virtual : DeviceProtocol.ftmsBluetooth;
+    DeviceProtocol protocol;
+    if (config.isVirtual) {
+      protocol = DeviceProtocol.virtual;
+    } else if (config.name.toLowerCase().contains('echelon')) {
+      protocol = DeviceProtocol.echelonBluetooth;
+    } else {
+      protocol = DeviceProtocol.ftmsBluetooth;
+    }
+
     final factory = _factories[protocol];
     if (factory == null) {
       throw UnsupportedError('No factory registered for protocol: $protocol');
