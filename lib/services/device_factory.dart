@@ -1,5 +1,6 @@
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/services/adapters/ftms_adapter.dart';
 import 'package:free_ride/services/adapters/virtual_bike_adapter.dart';
@@ -11,28 +12,39 @@ class DeviceFactory {
 
   /// Create an appropriate adapter based on SavedDevice configuration
   static DeviceAdapter createAdapter(SavedDevice device) {
+    late DeviceAdapter adapter;
+    
     switch (device.adapterType) {
       case 'virtual-bike':
-        return VirtualBikeAdapter(
+        adapter = VirtualBikeAdapter(
           deviceId: device.id,
           powerCalibration: device.powerCalibration,
         );
+        break;
       
       case 'virtual-treadmill':
-        return VirtualTreadmillAdapter(
+        adapter = VirtualTreadmillAdapter(
           deviceId: device.id,
           powerCalibration: device.powerCalibration,
         );
+        break;
       
       case 'ftms':
       default:
         // Determine device type from saved device type
         final deviceType = device.deviceType;
-        return FTMSAdapter(
+        adapter = FTMSAdapter(
           deviceType: deviceType,
           powerCalibration: device.powerCalibration,
         );
     }
+    
+    // Apply saved configuration to the adapter
+    if (device.configurations.isNotEmpty) {
+      adapter.applyConfiguration(device.configurations);
+    }
+    
+    return adapter;
   }
 
   /// Start discovery for Bluetooth fitness devices
@@ -131,18 +143,14 @@ class DeviceFactory {
     
     // Check device name for clues
     if (name.contains('bike') || name.contains('peloton') || name.contains('indoor') || name.contains('echelon')) {
-      return DeviceType.bike;
+      return DeviceType.indoorBike;
     }
     
     if (name.contains('treadmill') || name.contains('tread') || name.contains('run')) {
       return DeviceType.treadmill;
     }
     
-    if (name.contains('heart rate') || name.contains('hr monitor') || name.contains('hrm')) {
-      return DeviceType.heartRateMonitor;
-    }
-    
     // Default to bike if unknown
-    return DeviceType.bike;
+    return DeviceType.indoorBike;
   }
 }

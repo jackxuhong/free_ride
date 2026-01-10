@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/device_adapter.dart';
 
 class VirtualDeviceController extends StatefulWidget {
   final SavedDevice device;
@@ -35,7 +35,7 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
 
   @override
   Widget build(BuildContext context) {
-    final isBike = widget.device.deviceType == DeviceType.bike;
+    final isBike = widget.device.deviceType == DeviceType.indoorBike;
 
     return Card(
       child: Padding(

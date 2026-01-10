@@ -1,11 +1,5 @@
 import 'package:free_ride/models/configuration_item.dart';
-
-/// Enum representing the type of workout device
-enum DeviceType {
-  bike,
-  treadmill,
-  heartRateMonitor,
-}
+import 'package:free_ride/models/ftms_device.dart';
 
 /// Data class containing metrics from a connected device
 class DeviceMetrics {

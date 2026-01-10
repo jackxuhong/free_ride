@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/configuration_item.dart';
+import 'package:free_ride/models/ftms_device.dart';
 
 /// Virtual bike adapter for testing and simulation
 class VirtualBikeAdapter implements DeviceAdapter {
@@ -31,7 +32,7 @@ class VirtualBikeAdapter implements DeviceAdapter {
         _maxResistance = 32;
 
   @override
-  DeviceType get deviceType => DeviceType.bike;
+  DeviceType get deviceType => DeviceType.indoorBike;
 
   @override
   bool get isConnected => _isConnected;

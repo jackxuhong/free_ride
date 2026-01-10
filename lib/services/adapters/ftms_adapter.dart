@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/models/configuration_item.dart';
 
 /// FTMS (Fitness Machine Service) Bluetooth adapter
@@ -121,7 +122,7 @@ class FTMSAdapter implements DeviceAdapter {
       await _readDeviceCapabilities(ftmsService);
 
       // Find the appropriate data characteristic
-      final dataCharUuid = _deviceType == DeviceType.bike 
+      final dataCharUuid = _deviceType == DeviceType.indoorBike 
           ? indoorBikeDataUuid 
           : treadmillDataUuid;
       
@@ -138,7 +139,7 @@ class FTMSAdapter implements DeviceAdapter {
       
       _dataSubscription = _dataCharacteristic!.lastValueStream.listen((value) {
         if (value.isNotEmpty) {
-          final metrics = _deviceType == DeviceType.bike
+          final metrics = _deviceType == DeviceType.indoorBike
               ? _parseIndoorBikeData(value)
               : _parseTreadmillData(value);
           _metricsController.add(metrics);
@@ -172,7 +173,7 @@ class FTMSAdapter implements DeviceAdapter {
 
   /// Read device capabilities (resistance/incline ranges)
   Future<void> _readDeviceCapabilities(BluetoothService ftmsService) async {
-    if (_deviceType == DeviceType.bike) {
+    if (_deviceType == DeviceType.indoorBike) {
       // Read fitness machine features (silently)
       try {
         final featureChar = ftmsService.characteristics.firstWhere(
@@ -272,7 +273,7 @@ class FTMSAdapter implements DeviceAdapter {
     }
 
     try {
-      if (_deviceType == DeviceType.bike) {
+      if (_deviceType == DeviceType.indoorBike) {
         // Use simulation parameters for bikes (opcode 0x11)
         final gradePercent = ((level - _minResistance - (_maxResistance - _minResistance) * 0.25) * 20.0 / (_maxResistance - _minResistance)).clamp(-5.0, 15.0);
         final windSpeed = 0;

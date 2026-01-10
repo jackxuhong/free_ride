@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/configuration_item.dart';
+import 'package:free_ride/models/ftms_device.dart';
 
 /// Virtual treadmill adapter for testing and simulation
 class VirtualTreadmillAdapter implements DeviceAdapter {

@@ -1,5 +1,5 @@
 import 'package:hive/hive.dart';
-import 'package:free_ride/services/device_adapter.dart';
+import 'package:free_ride/models/ftms_device.dart';
 
 part 'saved_device.g.dart';
 
@@ -48,27 +48,22 @@ class SavedDevice extends HiveObject {
   DeviceType get deviceType {
     switch (deviceTypeString) {
       case 'bike':
-        return DeviceType.bike;
+        return DeviceType.indoorBike;
       case 'treadmill':
         return DeviceType.treadmill;
-      case 'heartRateMonitor':
-        return DeviceType.heartRateMonitor;
       default:
-        return DeviceType.bike;
+        return DeviceType.indoorBike;
     }
   }
 
   // Helper setter for DeviceType enum
   set deviceType(DeviceType type) {
     switch (type) {
-      case DeviceType.bike:
+      case DeviceType.indoorBike:
         deviceTypeString = 'bike';
         break;
       case DeviceType.treadmill:
         deviceTypeString = 'treadmill';
-        break;
-      case DeviceType.heartRateMonitor:
-        deviceTypeString = 'heartRateMonitor';
         break;
     }
   }

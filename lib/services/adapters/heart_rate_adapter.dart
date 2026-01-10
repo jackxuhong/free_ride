@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/models/configuration_item.dart';
 
 /// Heart Rate Monitor Bluetooth adapter
@@ -24,7 +25,7 @@ class HeartRateAdapter implements DeviceAdapter {
   HeartRateAdapter();
 
   @override
-  DeviceType get deviceType => DeviceType.heartRateMonitor;
+  DeviceType get deviceType => DeviceType.indoorBike;
 
   @override
   bool get isConnected => _isConnected;

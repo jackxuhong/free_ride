@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:hive/hive.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/saved_device_storage_service.dart';
 import 'package:free_ride/services/device_factory.dart';
 import 'package:free_ride/services/device_adapter.dart';
@@ -153,7 +154,7 @@ class DeviceProvider extends ChangeNotifier {
               customName: device.platformName.isNotEmpty ? device.platformName : 'Device',
               address: device.remoteId.toString(),
               adapterType: adapterType,
-              deviceTypeString: deviceType == DeviceType.bike ? 'bike' : 'treadmill',
+              deviceTypeString: deviceType == DeviceType.indoorBike ? 'bike' : 'treadmill',
               powerCalibration: 1.0,
               configurations: {},
             );

@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/widgets/virtual_device_controller.dart';
 
 class DeviceSetupScreen extends StatefulWidget {
@@ -44,11 +44,11 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                     color: isSelected ? Colors.blue.shade50 : null,
                     child: ListTile(
                       leading: Icon(
-                        device.deviceType == DeviceType.bike
+                        device.deviceType == DeviceType.indoorBike
                             ? Icons.directions_bike
                             : Icons.directions_run,
                         size: 32,
-                        color: device.deviceType == DeviceType.bike
+                        color: device.deviceType == DeviceType.indoorBike
                             ? Colors.blue
                             : Colors.orange,
                       ),
@@ -81,7 +81,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                         ],
                       ),
                       subtitle: Text(
-                        device.deviceType == DeviceType.bike
+                        device.deviceType == DeviceType.indoorBike
                             ? 'Indoor Bike'
                             : 'Treadmill',
                       ),
@@ -144,7 +144,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                                   value: activeDevice.isConnected ? 'Connected' : 'Disconnected',
                                   valueColor: activeDevice.isConnected ? Colors.green : Colors.orange,
                                 ),
-                                if (device.deviceType == DeviceType.bike)
+                                if (device.deviceType == DeviceType.indoorBike)
                                   _InfoRow(
                                     icon: Icons.fitness_center,
                                     label: 'Resistance Range',

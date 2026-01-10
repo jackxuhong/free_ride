@@ -3,10 +3,10 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/services/saved_device_storage_service.dart';
 import 'package:free_ride/services/device_factory.dart';
-import 'package:free_ride/services/device_adapter.dart';
 import 'package:uuid/uuid.dart';
 
 /// Screen for managing saved workout devices
@@ -188,11 +188,19 @@ class _DevicesScreenState extends State<DevicesScreen> {
     );
 
     if (result != null && result != device.powerCalibration) {
-      await _deviceStorage.updatePowerCalibration(device.id, result);
+      if (isVirtual) {
+        // For virtual devices, update targetSpeed in configurations
+        await _deviceStorage.updateConfigurations(device.id, {
+          'targetSpeed': result,
+        });
+      } else {
+        // For real devices, update power calibration
+        await _deviceStorage.updatePowerCalibration(device.id, result);
+      }
       await _loadDevices();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Calibration updated')),
+          SnackBar(content: Text(isVirtual ? 'Speed updated' : 'Calibration updated')),
         );
       }
     }
@@ -326,12 +334,10 @@ class _DeviceListTile extends StatelessWidget {
 
   IconData _getDeviceIcon() {
     switch (device.deviceType) {
-      case DeviceType.bike:
+      case DeviceType.indoorBike:
         return Icons.directions_bike;
       case DeviceType.treadmill:
         return Icons.directions_run;
-      case DeviceType.heartRateMonitor:
-        return Icons.favorite;
     }
   }
 
@@ -353,12 +359,10 @@ class _DeviceListTile extends StatelessWidget {
 
   String _getDeviceTypeLabel() {
     switch (device.deviceType) {
-      case DeviceType.bike:
+      case DeviceType.indoorBike:
         return 'Bike';
       case DeviceType.treadmill:
         return 'Treadmill';
-      case DeviceType.heartRateMonitor:
-        return 'HR Monitor';
     }
   }
 
@@ -455,7 +459,7 @@ class _DeviceListTile extends StatelessWidget {
                 ],
               ),
             ),
-            if (device.deviceType != DeviceType.heartRateMonitor)
+            if (device.deviceType != DeviceType.treadmill && device.deviceType != DeviceType.indoorBike || true)
               const PopupMenuItem(
                 value: 'calibrate',
                 child: Row(
@@ -639,7 +643,7 @@ class _DiscoveryDialogState extends State<_DiscoveryDialog> {
         customName: customName,
         address: info.address,
         adapterType: info.adapterType,
-        deviceTypeString: info.deviceType == DeviceType.bike 
+        deviceTypeString: info.deviceType == DeviceType.indoorBike 
             ? 'bike' 
             : info.deviceType == DeviceType.treadmill 
               ? 'treadmill' 
@@ -770,12 +774,10 @@ class _DiscoveredDeviceTile extends StatelessWidget {
 
   IconData _getDeviceIcon() {
     switch (info.deviceType) {
-      case DeviceType.bike:
+      case DeviceType.indoorBike:
         return Icons.directions_bike;
       case DeviceType.treadmill:
         return Icons.directions_run;
-      case DeviceType.heartRateMonitor:
-        return Icons.favorite;
     }
   }
 
@@ -794,12 +796,10 @@ class _DiscoveredDeviceTile extends StatelessWidget {
 
   String _getDeviceTypeLabel() {
     switch (info.deviceType) {
-      case DeviceType.bike:
+      case DeviceType.indoorBike:
         return 'Bike';
       case DeviceType.treadmill:
         return 'Treadmill';
-      case DeviceType.heartRateMonitor:
-        return 'HR Monitor';
     }
   }
 

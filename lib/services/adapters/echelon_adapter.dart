@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/models/configuration_item.dart';
 
 /// Echelon bike Bluetooth adapter
@@ -38,7 +39,7 @@ class EchelonAdapter implements DeviceAdapter {
   EchelonAdapter({double powerCalibration = 1.0}) : _powerCalibration = powerCalibration;
 
   @override
-  DeviceType get deviceType => DeviceType.bike;
+  DeviceType get deviceType => DeviceType.indoorBike;
 
   @override
   bool get isConnected => _isConnected;

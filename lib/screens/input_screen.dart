@@ -5,6 +5,7 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
+import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
 import 'package:free_ride/services/route_storage_service.dart';
@@ -358,22 +359,20 @@ class _InputScreenState extends State<InputScreen> {
   Future<void> _startRide() async {
     final routeProvider = context.read<RouteProvider>();
     final deviceProvider = context.read<DeviceProvider>();
+    final rideProvider = context.read<RideProvider>();
     
     if (routeProvider.currentRoute == null) return;
     if (deviceProvider.selectedDevice == null) return;
+    if (deviceProvider.activeDevice == null) return;
     
-    // TODO: Capture the route preview as thumbnail when RideProvider is updated
-    // final thumbnail = await _captureMapScreenshot();
+    // Initialize the ride with the selected device
+    await rideProvider.initializeRideWithAdapter(
+      routeProvider.currentRoute!,
+      deviceProvider.activeDevice!,
+      deviceProvider.selectedDevice!,
+    );
     
     if (mounted) {
-      // TODO: Update RideProvider to accept DeviceAdapter instead of VirtualFitnessDevice
-      // Initialize ride with device and thumbnail
-      // context.read<RideProvider>().startRideWithDevice(
-      //   routeProvider.currentRoute!,
-      //   deviceProvider.activeDevice!,
-      //   thumbnail: thumbnail,
-      // );
-      
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const SimulationScreen(),

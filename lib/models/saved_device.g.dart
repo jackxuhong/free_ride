@@ -23,9 +23,9 @@ class SavedDeviceAdapter extends TypeAdapter<SavedDevice> {
       address: fields[3] as String,
       adapterType: fields[4] as String,
       deviceTypeString: fields[5] as String,
-      powerCalibration: fields[6] as double? ?? 1.0,
+      powerCalibration: fields[6] as double,
       lastConnected: fields[7] as DateTime?,
-      configurations: (fields[8] as Map?)?.cast<String, dynamic>() ?? {},
+      configurations: (fields[8] as Map?)?.cast<String, dynamic>(),
     );
   }
 
