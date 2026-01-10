@@ -62,9 +62,6 @@ class GeocodingService {
         throw Exception('No location found for address: $address');
       }
       final location = locations.first;
-      if (location.latitude == null || location.longitude == null) {
-        throw Exception('Invalid coordinates returned for address: $address');
-      }
       return LatLng(location.latitude, location.longitude);
     } catch (e) {
       throw Exception('Native geocoding failed: $e');

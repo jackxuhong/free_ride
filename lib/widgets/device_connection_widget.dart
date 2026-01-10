@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/saved_device.dart';
+import 'package:free_ride/services/device_adapter.dart';
 
 class DeviceConnectionWidget extends StatelessWidget {
-  final FTMSDevice? device;
+  final SavedDevice? device;
   final bool isConnected;
 
   const DeviceConnectionWidget({
@@ -31,7 +32,7 @@ class DeviceConnectionWidget extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
-            device!.deviceType == DeviceType.indoorBike
+            device!.deviceType == DeviceType.bike
                 ? Icons.directions_bike
                 : Icons.directions_run,
             size: 16,

@@ -29,12 +29,35 @@ class RouteStorageService {
     Hive.registerAdapter(ElevationProfileAdapter());
     Hive.registerAdapter(RideSummaryAdapter());
 
-    // Open boxes
-    _routesBox = await Hive.openBox<SavedRoute>(AppConstants.routesBoxName);
-    _historyBox = await Hive.openBox<RideSummary>(AppConstants.historyBoxName);
-    _settingsBox = await Hive.openBox(AppConstants.settingsBoxName);
+    // Open boxes with retry logic for lock contention
+    _routesBox = await _openBoxWithRetry<SavedRoute>(AppConstants.routesBoxName);
+    _historyBox = await _openBoxWithRetry<RideSummary>(AppConstants.historyBoxName);
+    _settingsBox = await _openBoxWithRetry(AppConstants.settingsBoxName);
 
     _initialized = true;
+  }
+
+  /// Open a Hive box with retry logic to handle lock contention
+  static Future<Box<T>> _openBoxWithRetry<T>(String boxName, {int maxRetries = 3}) async {
+    for (int i = 0; i < maxRetries; i++) {
+      try {
+        return await Hive.openBox<T>(boxName);
+      } catch (e) {
+        if (i < maxRetries - 1) {
+          // Wait before retrying
+          await Future.delayed(Duration(milliseconds: 100 * (i + 1)));
+        } else {
+          // If all retries failed, try to delete and recreate
+          try {
+            await Hive.deleteBoxFromDisk(boxName);
+            return await Hive.openBox<T>(boxName);
+          } catch (deleteError) {
+            rethrow;
+          }
+        }
+      }
+    }
+    throw Exception('Failed to open box: $boxName');
   }
 
   // Save a new route

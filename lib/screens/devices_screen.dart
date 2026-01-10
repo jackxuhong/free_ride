@@ -4,7 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/device_storage_service.dart';
+import 'package:free_ride/services/saved_device_storage_service.dart';
 import 'package:free_ride/services/device_factory.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:uuid/uuid.dart';
@@ -18,7 +18,7 @@ class DevicesScreen extends StatefulWidget {
 }
 
 class _DevicesScreenState extends State<DevicesScreen> {
-  final _deviceStorage = DeviceStorageService();
+  final _deviceStorage = SavedDeviceStorageService();
   List<SavedDevice> _devices = [];
   bool _isLoading = true;
 
@@ -517,7 +517,7 @@ class _DiscoveryDialog extends StatefulWidget {
 
 class _DiscoveryDialogState extends State<_DiscoveryDialog> {
   final Map<String, _DiscoveredDeviceInfo> _discoveredDevices = {};
-  final _deviceStorage = DeviceStorageService();
+  final _deviceStorage = SavedDeviceStorageService();
   bool _isScanning = true;
   int _remainingSeconds = 60;
   Timer? _countdownTimer;

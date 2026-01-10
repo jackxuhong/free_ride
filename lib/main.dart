@@ -5,7 +5,7 @@ import 'package:hive_flutter/hive_flutter.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
-import 'package:free_ride/services/device_storage_service.dart';
+import 'package:free_ride/services/saved_device_storage_service.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
@@ -21,13 +21,20 @@ void main() async {
   // Disable flutter_blue_plus verbose logging
   FlutterBluePlus.setLogLevel(LogLevel.error);
 
+  // Clean up old Hive boxes that may have incompatible type IDs
+  try {
+    await Hive.deleteBoxFromDisk('ftms_devices');
+  } catch (_) {
+    // Box doesn't exist or is already deleted
+  }
+
   // Initialize storage
   await RouteStorageService().init();
   await ProfileService().init();
   
-  // Initialize device storage
+  // Initialize device storage with SavedDeviceStorageService
   final settingsBox = await Hive.openBox(AppConstants.settingsBoxName);
-  await DeviceStorageService().init(settingsBox);
+  await SavedDeviceStorageService().init(settingsBox);
 
   runApp(const MyApp());
 }

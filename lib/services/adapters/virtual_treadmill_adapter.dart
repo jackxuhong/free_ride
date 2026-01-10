@@ -69,12 +69,15 @@ class VirtualTreadmillAdapter implements DeviceAdapter {
   @override
   Future<void> setResistance(int level) async {
     // Virtual treadmills don't have resistance
+    print('VirtualTreadmillAdapter: Resistance set to $level (ignored)');
   }
 
   @override
   Future<void> setIncline(double level) async {
     final clamped = level.clamp(_minIncline, _maxIncline);
     _currentIncline = clamped;
+
+    print('VirtualTreadmillAdapter: Incline set to $_currentIncline');
   }
 
   void _startSimulation() {

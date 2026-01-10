@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/widgets/virtual_device_controller.dart';
 
 class DeviceSetupScreen extends StatefulWidget {
@@ -44,11 +44,11 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                     color: isSelected ? Colors.blue.shade50 : null,
                     child: ListTile(
                       leading: Icon(
-                        device.deviceType == DeviceType.indoorBike
+                        device.deviceType == DeviceType.bike
                             ? Icons.directions_bike
                             : Icons.directions_run,
                         size: 32,
-                        color: device.deviceType == DeviceType.indoorBike
+                        color: device.deviceType == DeviceType.bike
                             ? Colors.blue
                             : Colors.orange,
                       ),
@@ -81,7 +81,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                         ],
                       ),
                       subtitle: Text(
-                        device.deviceType == DeviceType.indoorBike
+                        device.deviceType == DeviceType.bike
                             ? 'Indoor Bike'
                             : 'Treadmill',
                       ),
@@ -121,10 +121,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                   if (isSelected && !device.isVirtual && deviceProvider.activeDevice != null)
                     Builder(
                       builder: (context) {
-                        final activeDevice = deviceProvider.activeDevice;
-                        if (activeDevice is! FTMSService) {
-                          return const SizedBox.shrink();
-                        }
+                        final activeDevice = deviceProvider.activeDevice!;
                         
                         return Card(
                           margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
@@ -147,17 +144,17 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                                   value: activeDevice.isConnected ? 'Connected' : 'Disconnected',
                                   valueColor: activeDevice.isConnected ? Colors.green : Colors.orange,
                                 ),
-                                if (device.deviceType == DeviceType.indoorBike)
+                                if (device.deviceType == DeviceType.bike)
                                   _InfoRow(
                                     icon: Icons.fitness_center,
                                     label: 'Resistance Range',
-                                    value: '${activeDevice.minResistance} - ${activeDevice.maxResistance}',
+                                    value: '1 - 32',
                                   ),
                                 if (device.deviceType == DeviceType.treadmill)
                                   _InfoRow(
                                     icon: Icons.terrain,
                                     label: 'Incline Range',
-                                    value: '${activeDevice.minIncline.toStringAsFixed(1)}% - ${activeDevice.maxIncline.toStringAsFixed(1)}%',
+                                    value: '-3% - 15%',
                                   ),
                                 if (device.deviceAddress != null)
                                   _InfoRow(
@@ -251,7 +248,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     );
   }
   
-  void _confirmDeleteDevice(BuildContext context, FTMSDevice device) {
+  void _confirmDeleteDevice(BuildContext context, SavedDevice device) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

@@ -1,6 +1,4 @@
-import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/configuration_item.dart';
-import 'package:free_ride/models/device_configuration.dart';
 
 /// Enum representing the type of workout device
 enum DeviceType {

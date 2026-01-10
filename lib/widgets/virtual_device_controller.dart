@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/saved_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
+import 'package:free_ride/services/device_adapter.dart';
 
 class VirtualDeviceController extends StatefulWidget {
-  final FTMSDevice device;
+  final SavedDevice device;
 
   const VirtualDeviceController({
     super.key,
@@ -21,7 +22,7 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
   @override
   void initState() {
     super.initState();
-    _speed = widget.device.effortLevel;
+    _speed = widget.device.configurations['effortLevel'] ?? 1.0;
   }
 
   Future<void> _updateParameters() async {
@@ -34,7 +35,7 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
 
   @override
   Widget build(BuildContext context) {
-    final isBike = widget.device.deviceType == DeviceType.indoorBike;
+    final isBike = widget.device.deviceType == DeviceType.bike;
 
     return Card(
       child: Padding(

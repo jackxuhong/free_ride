@@ -187,11 +187,6 @@ class HeartRateAdapter implements DeviceAdapter {
   }
 
   @override
-  Future<void> setResistance(int level) async {
-    // Heart rate monitors don't support resistance
-  }
-
-  @override
   Future<void> setIncline(double level) async {
     // Heart rate monitors don't support incline
   }

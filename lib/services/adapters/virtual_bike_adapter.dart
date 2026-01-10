@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/widgets.dart';
 import 'package:free_ride/services/device_adapter.dart';
 import 'package:free_ride/models/configuration_item.dart';
 
@@ -71,11 +72,14 @@ class VirtualBikeAdapter implements DeviceAdapter {
   Future<void> setResistance(int level) async {
     final clamped = level.clamp(_minResistance, _maxResistance);
     _currentResistance = clamped;
+
+    debugPrint('VirtualBikeAdapter: Resistance set to $_currentResistance');
   }
 
   @override
   Future<void> setIncline(double level) async {
     // Virtual bikes don't support incline
+    debugPrint('VirtualBikeAdapter: Incline set to $level (ignored)');
   }
 
   void _startSimulation() {

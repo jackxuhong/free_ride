@@ -1,12 +1,9 @@
-import 'dart:typed_data';
-import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:free_ride/models/saved_route.dart';
 import 'package:free_ride/providers/route_provider.dart';
-import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
 import 'package:free_ride/services/location_service.dart';
 import 'package:free_ride/services/geocoding_service.dart';
@@ -358,23 +355,6 @@ class _InputScreenState extends State<InputScreen> {
     });
   }
 
-  Future<Uint8List?> _captureMapScreenshot() async {
-    try {
-      // Wait a bit to ensure map is fully rendered
-      await Future.delayed(const Duration(milliseconds: 100));
-      
-      final boundary = _previewMapKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-      if (boundary == null) return null;
-      
-      final image = await boundary.toImage(pixelRatio: 2.0);
-      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-      return byteData?.buffer.asUint8List();
-    } catch (e) {
-      debugPrint('Error capturing map screenshot: $e');
-      return null;
-    }
-  }
-
   Future<void> _startRide() async {
     final routeProvider = context.read<RouteProvider>();
     final deviceProvider = context.read<DeviceProvider>();
@@ -382,16 +362,17 @@ class _InputScreenState extends State<InputScreen> {
     if (routeProvider.currentRoute == null) return;
     if (deviceProvider.selectedDevice == null) return;
     
-    // Capture the route preview as thumbnail
-    final thumbnail = await _captureMapScreenshot();
+    // TODO: Capture the route preview as thumbnail when RideProvider is updated
+    // final thumbnail = await _captureMapScreenshot();
     
     if (mounted) {
+      // TODO: Update RideProvider to accept DeviceAdapter instead of VirtualFitnessDevice
       // Initialize ride with device and thumbnail
-      context.read<RideProvider>().startRideWithDevice(
-        routeProvider.currentRoute!,
-        deviceProvider.activeDevice!,
-        thumbnail: thumbnail,
-      );
+      // context.read<RideProvider>().startRideWithDevice(
+      //   routeProvider.currentRoute!,
+      //   deviceProvider.activeDevice!,
+      //   thumbnail: thumbnail,
+      // );
       
       Navigator.of(context).push(
         MaterialPageRoute(

@@ -306,6 +306,28 @@ class FTMSAdapter implements DeviceAdapter {
     }
   }
 
+  @override
+  Future<void> setIncline(double level) async {
+    if (_controlCharacteristic == null || !_isConnected || _deviceType != DeviceType.treadmill) {
+      return;
+    }
+
+    try {
+      // Use target inclination for treadmills (opcode 0x06)
+      final inclineValue = (level * 10).clamp((_minIncline * 10).round(), (_maxIncline * 10).round()).round();
+      
+      final packet = [
+        0x06,
+        inclineValue & 0xFF,
+        (inclineValue >> 8) & 0xFF,
+      ];
+      
+      await _controlCharacteristic!.write(packet, withoutResponse: false);
+    } catch (e) {
+      // Failed to send command
+    }
+  }
+
   /// Parse Indoor Bike Data (UUID 0x2AD2)
   DeviceMetrics _parseIndoorBikeData(List<int> data) {
     if (data.length < 4) return DeviceMetrics();

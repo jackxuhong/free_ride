@@ -131,11 +131,8 @@ class RideProvider with ChangeNotifier {
     
     // Connect to device if it's a real FTMS device
     if (device is FTMSService) {
-      final connected = await device.connect();
+      await device.connect();
       // Don't show error - auto-reconnect will handle connection issues
-      // if (!connected) {
-      //   print('Failed to connect to FTMS device');
-      // }
       
       // Listen to connection state for auto-pause/resume
       _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
@@ -644,6 +641,7 @@ class RideProvider with ChangeNotifier {
   @override
   void dispose() {
     _simulationTimer?.cancel();
+    _deviceConnectionSubscription?.cancel();
     super.dispose();
   }
 }

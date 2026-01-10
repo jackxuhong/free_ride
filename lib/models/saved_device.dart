@@ -78,6 +78,15 @@ class SavedDevice extends HiveObject {
 
   // Short address for UI display
   String get shortAddress => address.substring(address.length - 4).toUpperCase();
+  
+  // Alias for customName (for UI compatibility)
+  String get name => customName;
+  
+  // Alias for address (for compatibility)
+  String? get deviceAddress => address.isNotEmpty ? address : null;
+  
+  // Check if device is virtual
+  bool get isVirtual => adapterType.startsWith('virtual-');
 
   SavedDevice copyWith({
     String? id,
