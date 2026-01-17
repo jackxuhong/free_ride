@@ -1,10 +1,14 @@
 # Free Ride
 
-A Flutter mobile app that simulates bike rides with realistic physics based on elevation profiles. Enter start and end addresses to generate a route, then experience a 10x speed simulation where your virtual speed adjusts based on grade.
+- a mobile application that provides the ability to simulate an outdoor running/walking/cycling experience indoors using a treadmill, stationary bike, or elliptical machine.
+- integration with elevation data to adjust the resistance or incline of the exercise equipment based on virtual terrain.
+- The application connects to exercise equipment via Bluetooth to monitor and control workout parameters.
+- It features virtual routes, real-time stats, and customizable workout intensity.
+- The app aims to enhance indoor workouts by making them more engaging and realistic, or allowing users to train for outdoor events regardless of weather conditions.
 
 ## Features
 
-- **Route Generation**: Enter addresses or coordinates to fetch routes from OpenRouteService
+- **Route Generation**: Enter addresses or coordinates to fetch routes with elevation data from OpenRouteService
 - **Elevation-Based Physics**: Rider speed adjusts based on grade (±10% per 10% grade)
 - **Real-Time Simulation**: Animated rider with live metrics (speed, elevation, grade, distance)
 - **Comprehensive Statistics**: Track calories, power output, duration, and completion percentage
