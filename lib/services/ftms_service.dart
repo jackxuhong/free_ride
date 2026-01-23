@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/device_data_snapshot.dart';
@@ -67,104 +68,74 @@ class FTMSService extends VirtualFitnessDevice {
     return cleaned;
   }
 
+  /// Detect if a BLE device is a supported FTMS device
+  /// Returns FTMSDevice if supported, null otherwise
+  static Future<FTMSDevice?> detectDevice(BluetoothDevice bleDevice) async {
+    try {
+      // Connect to device with timeout
+      await bleDevice.connect(timeout: const Duration(seconds: 5));
+      
+      // Discover services
+      final services = await bleDevice.discoverServices();
+      
+      // Check if FTMS service exists
+      final ftmsService = services.firstWhere(
+        (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
+        orElse: () => throw Exception('FTMS service not found'),
+      );
+      
+      // Check which characteristics are present to determine device type
+      final hasBikeData = ftmsService.characteristics.any(
+        (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(indoorBikeDataUuid),
+      );
+      final hasTreadmillData = ftmsService.characteristics.any(
+        (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(treadmillDataUuid),
+      );
+      
+      // Disconnect after detection
+      await bleDevice.disconnect();
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      // Determine device type - prefer bike if both are present
+      DeviceType deviceType = DeviceType.indoorBike;
+      if (hasTreadmillData && !hasBikeData) {
+        deviceType = DeviceType.treadmill;
+      }
+      
+      // Return FTMSDevice model
+      return FTMSDevice(
+        id: bleDevice.remoteId.str,
+        name: bleDevice.platformName.isNotEmpty 
+            ? bleDevice.platformName 
+            : 'FTMS Device',
+        deviceType: deviceType,
+        isVirtual: false,
+        deviceAddress: bleDevice.remoteId.str,
+        lastConnected: DateTime.now(),
+      );
+    } catch (e) {
+      // Not a supported FTMS device or connection failed
+      try {
+        await bleDevice.disconnect();
+      } catch (_) {}
+      return null;
+    }
+  }
+
   FTMSService({required this.device}) : _deviceType = device.deviceType;
 
   @override
   DeviceType get deviceType => _deviceType;
 
-  /// Scan for FTMS devices
-  static Future<List<Map<String, dynamic>>> scanForDevices() async {
-    final deviceInfoList = <Map<String, dynamic>>[];
-    final scannedDevices = <BluetoothDevice>[];
-    
-    try {
-      // Check if Bluetooth is available
-      if (await FlutterBluePlus.isSupported == false) {
-        throw Exception('Bluetooth not supported on this device');
-      }
-
-      // Start scanning for FTMS service
-      await FlutterBluePlus.startScan(
-        withServices: [Guid(ftmsServiceUuid)],
-        timeout: const Duration(seconds: 10),
-      );
-
-      // Listen to scan results
-      final subscription = FlutterBluePlus.scanResults.listen((results) {
-        for (var result in results) {
-          if (!scannedDevices.contains(result.device)) {
-            scannedDevices.add(result.device);
-          }
-        }
-      });
-
-      await Future.delayed(const Duration(seconds: 10));
-      await subscription.cancel();
-      await FlutterBluePlus.stopScan();
-      
-      // Now connect to each device to determine its type
-      for (var device in scannedDevices) {
-        try {
-          // print('Connecting to ${device.platformName} to determine type...');
-          await device.connect(timeout: const Duration(seconds: 5));
-          
-          // Discover services
-          final services = await device.discoverServices();
-          final ftmsService = services.firstWhere(
-            (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
-            orElse: () => throw Exception('FTMS service not found'),
-          );
-          
-          // Check which characteristics are present
-          final hasBikeData = ftmsService.characteristics.any(
-            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(indoorBikeDataUuid),
-          );
-          final hasTreadmillData = ftmsService.characteristics.any(
-            (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(treadmillDataUuid),
-          );
-          
-          // Determine device type - prefer bike if both are present
-          DeviceType deviceType = DeviceType.indoorBike; // default
-          if (hasTreadmillData && !hasBikeData) {
-            deviceType = DeviceType.treadmill;
-          }
-          
-          deviceInfoList.add({
-            'device': device,
-            'deviceType': deviceType,
-          });
-          
-          // Disconnect after getting info and wait for disconnect to complete
-          await device.disconnect();
-          await Future.delayed(const Duration(milliseconds: 500));
-        } catch (e) {
-          print('Error connecting to ${device.platformName}: $e');
-          // Add with default type if connection fails
-          deviceInfoList.add({
-            'device': device,
-            'deviceType': DeviceType.indoorBike,
-          });
-          try {
-            await device.disconnect();
-          } catch (_) {}
-        }
-      }
-    } catch (e) {
-      print('Error scanning for devices: $e');
-    }
-
-    return deviceInfoList;
-  }
-
   /// Connect to the device
   Future<bool> connect() async {
     try {
       if (device.deviceAddress == null) {
-        // print('Cannot connect: device address is null');
+        developer.log('Cannot connect: device address is null', name: 'FTMSService', level: 1000);
         return false;
       }
 
-      // print('Attempting to connect to device: ${device.name}');
+      developer.log('Attempting to connect to device: ${device.name}', name: 'FTMSService');
       
       // Get all connected and available devices
       final connectedDevices = FlutterBluePlus.connectedDevices;
@@ -175,35 +146,35 @@ class FTMSService extends VirtualFitnessDevice {
 
       // Check current connection state
       final connectionState = await _connectedDevice!.connectionState.first;
-      // print('Current connection state: $connectionState');
+      developer.log('Current connection state: $connectionState', name: 'FTMSService');
       
       // Connect if not already connected
       if (connectionState == BluetoothConnectionState.disconnected) {
-        // print('Connecting to device...');
+        developer.log('Connecting to device...', name: 'FTMSService');
         await _connectedDevice!.connect(timeout: const Duration(seconds: 15));
-        // print('Connected successfully');
+        developer.log('Connected successfully', name: 'FTMSService');
       } else {
-        // print('Device already connected');
+        developer.log('Device already connected', name: 'FTMSService');
       }
 
       // Discover services
-      // print('Discovering services...');
+      developer.log('Discovering services...', name: 'FTMSService');
       final services = await _connectedDevice!.discoverServices();
-      // print('Found ${services.length} services');
+      developer.log('Found ${services.length} services', name: 'FTMSService');
       
       // Log all service UUIDs for debugging
-      // print('Available services:');
-      // for (var service in services) {
-      //   print('  - ${service.uuid.toString()}');
-      // }
-      // print('Looking for FTMS service: $ftmsServiceUuid');
+      developer.log('Available services:', name: 'FTMSService');
+      for (var service in services) {
+        developer.log('  - ${service.uuid.toString()}', name: 'FTMSService');
+      }
+      developer.log('Looking for FTMS service: $ftmsServiceUuid', name: 'FTMSService');
       
       // Find FTMS service
       final ftmsService = services.firstWhere(
         (s) => _normalizeUuid(s.uuid.toString()) == _normalizeUuid(ftmsServiceUuid),
         orElse: () => throw Exception('FTMS service not found'),
       );
-      // print('Found FTMS service with ${ftmsService.characteristics.length} characteristics');
+      developer.log('Found FTMS service with ${ftmsService.characteristics.length} characteristics', name: 'FTMSService');
       
       // Read device capabilities for bikes
       if (_deviceType == DeviceType.indoorBike) {
@@ -300,7 +271,7 @@ class FTMSService extends VirtualFitnessDevice {
         if (state == BluetoothConnectionState.disconnected && !_isReconnecting) {
           _isConnected = false;
           _connectionStateController.add(false);
-          // print('FTMS device disconnected, attempting to reconnect...');
+          developer.log('FTMS device disconnected, attempting to reconnect...', name: 'FTMSService', level: 900);
           _attemptReconnect();
         }
       });
@@ -310,7 +281,7 @@ class FTMSService extends VirtualFitnessDevice {
 
       return true;
     } catch (e) {
-      // print('Error connecting to device: $e');
+      developer.log('Error connecting to device: $e', name: 'FTMSService', level: 1000, error: e);
       await disconnect();
       
       // Trigger auto-reconnect for initial connection failures
@@ -347,10 +318,10 @@ class FTMSService extends VirtualFitnessDevice {
     
     final success = await connect();
     if (success) {
-      // print('Successfully reconnected to FTMS device');
+      developer.log('Successfully reconnected to FTMS device', name: 'FTMSService', level: 800);
       _isReconnecting = false;
     } else {
-      // print('Reconnection failed, will retry...');
+      developer.log('Reconnection failed, will retry...', name: 'FTMSService', level: 900);
       _isReconnecting = false;
       // Will trigger again via connection state listener
     }
@@ -379,12 +350,12 @@ class FTMSService extends VirtualFitnessDevice {
   Future<bool> sendControlCommand(ControlCommand command) async {
     try {
       if (_controlCharacteristic == null) {
-        // print('Control characteristic not available');
+        developer.log('Control characteristic not available', name: 'FTMSService', level: 900);
         return false;
       }
       
       if (!_isConnected) {
-        // print('Device not connected, cannot send control command');
+        developer.log('Device not connected, cannot send control command', name: 'FTMSService', level: 900);
         return false;
       }
 
@@ -421,7 +392,7 @@ class FTMSService extends VirtualFitnessDevice {
       await _controlCharacteristic!.write(packet, withoutResponse: false);
       return true;
     } catch (e) {
-      print('Error sending control command: $e');
+      developer.log('Error sending control command: $e', name: 'FTMSService', level: 1000, error: e);
       return false;
     }
   }

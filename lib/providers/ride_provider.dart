@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:latlong2/latlong.dart';
@@ -334,9 +335,9 @@ class RideProvider with ChangeNotifier {
       final storage = RouteStorageService();
       await storage.init(); // Ensure storage is initialized
       await storage.saveRideHistory(summary);
-      print('✅ Ride saved to history: ${summary.routeName}');
+      developer.log('Ride saved to history: ${summary.routeName}', name: 'RideProvider', level: 800);
     } catch (e) {
-      print('❌ Failed to save ride: $e');
+      developer.log('Failed to save ride: $e', name: 'RideProvider', level: 1000, error: e);
       // Silently fail - user can manually save from summary screen
     }
   }

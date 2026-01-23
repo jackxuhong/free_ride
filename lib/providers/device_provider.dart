@@ -10,6 +10,13 @@ import 'package:free_ride/services/ftms_service.dart';
 class DeviceProvider extends ChangeNotifier {
   final DeviceStorageService _storage = DeviceStorageService();
 
+  /// Service detector functions registry
+  /// Each detector attempts to identify and configure a BLE device
+  static final List<Future<FTMSDevice?> Function(BluetoothDevice)> _detectors = [
+    FTMSService.detectDevice,
+    // Future device services can be registered here
+  ];
+
   FTMSDevice? _selectedDevice;
   VirtualFitnessDevice? _activeDevice;
   bool _isScanning = false;
@@ -131,7 +138,7 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  /// Start scanning for real FTMS devices
+  /// Start scanning for all BLE devices
   Future<void> startScan() async {
     if (_isScanning) return;
     
@@ -139,28 +146,71 @@ class DeviceProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // Scan for FTMS devices with type detection
-      final deviceInfoList = await FTMSService.scanForDevices();
-      
-      // Convert to FTMSDevice models and save
-      for (var deviceInfo in deviceInfoList) {
-        final bleDevice = deviceInfo['device'] as BluetoothDevice;
-        final deviceType = deviceInfo['deviceType'] as DeviceType;
-        
-        // Check if already saved
-        final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
-        if (existing == null) {
-          final device = FTMSDevice(
-            id: bleDevice.remoteId.str,
-            name: bleDevice.platformName.isNotEmpty ? bleDevice.platformName : 'FTMS Device',
-            deviceType: DeviceType.indoorBike, // Default, will be determined on connect
-            isVirtual: false,
-            deviceAddress: bleDevice.remoteId.str,
-          );
-          await _storage.saveDevice(device);
+      // Check if Bluetooth is available
+      if (await FlutterBluePlus.isSupported == false) {
+        throw Exception('Bluetooth not supported on this device');
+      }
+
+      // Scan for ALL BLE devices (no service filter)
+      await FlutterBluePlus.startScan(
+        timeout: const Duration(seconds: 10),
+      );
+
+      final scannedDevices = <BluetoothDevice>[];
+
+      // Listen to scan results
+      final subscription = FlutterBluePlus.scanResults.listen((results) {
+        for (var result in results) {
+          if (!scannedDevices.contains(result.device)) {
+            scannedDevices.add(result.device);
+          }
+        }
+      });
+
+      // Wait for scan to complete
+      await Future.delayed(const Duration(seconds: 10));
+      await subscription.cancel();
+      await FlutterBluePlus.stopScan();
+
+      // Process each discovered device sequentially
+      for (var bleDevice in scannedDevices) {
+        // Skip devices with no name (often not fitness equipment)
+        if (bleDevice.platformName.isEmpty) {
+          continue;
+        }
+
+        // Try each registered detector
+        for (var detector in _detectors) {
+          try {
+            final ftmsDevice = await detector(bleDevice);
+            
+            if (ftmsDevice != null) {
+              // Device detected! Check if already saved
+              final existing = _availableDevices
+                  .where((d) => d.deviceAddress == ftmsDevice.deviceAddress)
+                  .firstOrNull;
+              
+              if (existing == null) {
+                // Save new device
+                await _storage.saveDevice(ftmsDevice);
+                debugPrint('Discovered ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}');
+              } else {
+                // Update last connected time
+                final updated = existing.copyWith(lastConnected: DateTime.now());
+                await _storage.saveDevice(updated);
+              }
+              
+              // First match wins - stop checking other detectors
+              break;
+            }
+          } catch (e) {
+            debugPrint('Detector error for ${bleDevice.platformName}: $e');
+            // Continue to next detector
+          }
         }
       }
 
+      // Reload devices list
       await _loadDevices();
     } catch (e) {
       debugPrint('Error scanning: $e');

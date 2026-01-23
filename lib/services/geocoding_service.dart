@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
 import 'dart:io';
 import 'package:geocoding/geocoding.dart';
 import 'package:http/http.dart' as http;
@@ -26,7 +27,7 @@ class GeocodingService {
       try {
         return await _geocodeWithNative(input);
       } catch (e) {
-        print('Native geocoding failed: $e');
+        developer.log('Native geocoding failed: $e', name: 'GeocodingService', level: 900, error: e);
         // Fall through to Nominatim
       }
     }
@@ -35,7 +36,7 @@ class GeocodingService {
     try {
       return await _geocodeWithNominatim(input);
     } catch (nominatimError) {
-      print('Nominatim geocoding failed: $nominatimError');
+      developer.log('Nominatim geocoding failed: $nominatimError', name: 'GeocodingService', level: 900, error: nominatimError);
       rethrow;
     }
   }
