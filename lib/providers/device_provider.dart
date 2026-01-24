@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/ftms_device.dart';
@@ -142,43 +145,86 @@ class DeviceProvider extends ChangeNotifier {
   Future<void> startScan() async {
     if (_isScanning) return;
     
+    developer.log('Starting BLE device scan...', name: 'DeviceProvider');
     _isScanning = true;
     notifyListeners();
 
     try {
       // Check if Bluetooth is available
       if (await FlutterBluePlus.isSupported == false) {
+        developer.log('Bluetooth not supported on this device', name: 'DeviceProvider', level: 1000);
         throw Exception('Bluetooth not supported on this device');
       }
 
-      // Scan for ALL BLE devices (no service filter)
-      await FlutterBluePlus.startScan(
-        timeout: const Duration(seconds: 10),
-      );
+      // Check Bluetooth adapter state
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      developer.log('Bluetooth adapter state: $adapterState', name: 'DeviceProvider');
+      
+      if (adapterState != BluetoothAdapterState.on) {
+        developer.log('Waiting for Bluetooth to turn on...', name: 'DeviceProvider', level: 900);
+        // Wait for Bluetooth to turn on (with timeout)
+        final stateCompleter = Completer<void>();
+        StreamSubscription? stateSubscription;
+        
+        stateSubscription = FlutterBluePlus.adapterState.listen((state) {
+          developer.log('Bluetooth state changed to: $state', name: 'DeviceProvider');
+          if (state == BluetoothAdapterState.on) {
+            stateCompleter.complete();
+            stateSubscription?.cancel();
+          }
+        });
+        
+        // Wait up to 5 seconds for Bluetooth to turn on
+        await stateCompleter.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            stateSubscription?.cancel();
+            developer.log('Bluetooth did not turn on within 5 seconds', name: 'DeviceProvider', level: 1000);
+            throw Exception('Bluetooth is not turned on. Please enable Bluetooth and try again.');
+          },
+        );
+        developer.log('Bluetooth is now ready', name: 'DeviceProvider');
+      }
 
+      // Scan for ALL BLE devices (no service filter)
       final scannedDevices = <BluetoothDevice>[];
 
-      // Listen to scan results
+      // Set up scan results listener BEFORE starting scan
       final subscription = FlutterBluePlus.scanResults.listen((results) {
         for (var result in results) {
           if (!scannedDevices.contains(result.device)) {
             scannedDevices.add(result.device);
+            developer.log('Found BLE device: ${result.device.platformName.isNotEmpty ? result.device.platformName : result.device.remoteId}', name: 'DeviceProvider');
           }
         }
       });
 
-      // Wait for scan to complete
-      await Future.delayed(const Duration(seconds: 10));
-      await subscription.cancel();
-      await FlutterBluePlus.stopScan();
+      try {
+        // Start scan with timeout (will auto-stop after 10 seconds)
+        developer.log('Starting BLE scan (10 second timeout)...', name: 'DeviceProvider');
+        await FlutterBluePlus.startScan(
+          timeout: const Duration(seconds: 10),
+        );
+
+        // Wait for scan to complete (timeout will handle stopping)
+        await Future.delayed(const Duration(seconds: 10));
+        developer.log('BLE scan completed. Found ${scannedDevices.length} devices', name: 'DeviceProvider');
+      } finally {
+        // Clean up subscription
+        await subscription.cancel();
+      }
 
       // Process each discovered device sequentially
+      developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
       for (var bleDevice in scannedDevices) {
         // Skip devices with no name (often not fitness equipment)
         if (bleDevice.platformName.isEmpty) {
+          developer.log('Skipping unnamed device: ${bleDevice.remoteId}', name: 'DeviceProvider');
           continue;
         }
 
+        developer.log('Testing device: ${bleDevice.platformName}', name: 'DeviceProvider');
+        
         // Try each registered detector
         for (var detector in _detectors) {
           try {
@@ -193,17 +239,22 @@ class DeviceProvider extends ChangeNotifier {
               if (existing == null) {
                 // Save new device
                 await _storage.saveDevice(ftmsDevice);
+                developer.log('Discovered new ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}', name: 'DeviceProvider', level: 800);
                 debugPrint('Discovered ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}');
               } else {
                 // Update last connected time
                 final updated = existing.copyWith(lastConnected: DateTime.now());
                 await _storage.saveDevice(updated);
+                developer.log('Updated existing device: ${ftmsDevice.name}', name: 'DeviceProvider');
               }
               
               // First match wins - stop checking other detectors
               break;
+            } else {
+              developer.log('Device ${bleDevice.platformName} not supported by this detector', name: 'DeviceProvider');
             }
           } catch (e) {
+            developer.log('Detector error for ${bleDevice.platformName}: $e', name: 'DeviceProvider', level: 900, error: e);
             debugPrint('Detector error for ${bleDevice.platformName}: $e');
             // Continue to next detector
           }
@@ -212,7 +263,9 @@ class DeviceProvider extends ChangeNotifier {
 
       // Reload devices list
       await _loadDevices();
+      developer.log('Device scan completed. Total devices available: ${_availableDevices.length}', name: 'DeviceProvider', level: 800);
     } catch (e) {
+      developer.log('Error scanning: $e', name: 'DeviceProvider', level: 1000, error: e);
       debugPrint('Error scanning: $e');
     } finally {
       _isScanning = false;
