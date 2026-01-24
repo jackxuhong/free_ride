@@ -11,6 +11,8 @@ import 'package:free_ride/services/virtual_treadmill.dart';
 import 'package:free_ride/services/ftms_service.dart';
 
 class DeviceProvider extends ChangeNotifier {
+    /// Local cache of discovered/tested device addresses
+    final Set<String> _deviceCache = <String>{};
   final DeviceStorageService _storage = DeviceStorageService();
 
   /// Service detector functions registry
@@ -144,7 +146,7 @@ class DeviceProvider extends ChangeNotifier {
   /// Start scanning for all BLE devices
   Future<void> startScan() async {
     if (_isScanning) return;
-    
+
     developer.log('Starting BLE device scan...', name: 'DeviceProvider');
     _isScanning = true;
     notifyListeners();
@@ -223,19 +225,26 @@ class DeviceProvider extends ChangeNotifier {
           continue;
         }
 
+        // Skip if already discovered/tested in cache
+        final cacheKey = bleDevice.remoteId.toString();
+        if (_deviceCache.contains(cacheKey)) {
+          developer.log('Skipping cached device: ${bleDevice.platformName}', name: 'DeviceProvider');
+          continue;
+        }
+
         developer.log('Testing device: ${bleDevice.platformName}', name: 'DeviceProvider');
-        
+
         // Try each registered detector
         for (var detector in _detectors) {
           try {
             final ftmsDevice = await detector(bleDevice);
-            
+
             if (ftmsDevice != null) {
               // Device detected! Check if already saved
               final existing = _availableDevices
                   .where((d) => d.deviceAddress == ftmsDevice.deviceAddress)
                   .firstOrNull;
-              
+
               if (existing == null) {
                 // Save new device
                 await _storage.saveDevice(ftmsDevice);
@@ -247,7 +256,9 @@ class DeviceProvider extends ChangeNotifier {
                 await _storage.saveDevice(updated);
                 developer.log('Updated existing device: ${ftmsDevice.name}', name: 'DeviceProvider');
               }
-              
+
+              // Add to cache
+              _deviceCache.add(cacheKey);
               // First match wins - stop checking other detectors
               break;
             } else {
@@ -259,6 +270,8 @@ class DeviceProvider extends ChangeNotifier {
             // Continue to next detector
           }
         }
+        // Add to cache even if not supported (so we don't test again)
+        _deviceCache.add(cacheKey);
       }
 
       // Reload devices list
@@ -296,6 +309,13 @@ class DeviceProvider extends ChangeNotifier {
   /// Refresh devices list
   Future<void> refreshDevices() async {
     await _loadDevices();
+  }
+
+  /// Clear the local device cache
+  void clearDeviceCache() {
+    _deviceCache.clear();
+    developer.log('Device cache cleared', name: 'DeviceProvider');
+    notifyListeners();
   }
 
   @override

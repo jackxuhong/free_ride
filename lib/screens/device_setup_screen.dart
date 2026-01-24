@@ -19,6 +19,39 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Manage Devices'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep),
+            tooltip: 'Clear device cache',
+            onPressed: () async {
+              final confirmed = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Clear Device Cache'),
+                  content: const Text('Are you sure you want to clear the discovered device cache? All devices will be rediscovered and retested on the next scan.'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: const Text('Cancel'),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: const Text('Clear'),
+                    ),
+                  ],
+                ),
+              );
+              if (confirmed == true) {
+                context.read<DeviceProvider>().clearDeviceCache();
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Device cache cleared.')),
+                  );
+                }
+              }
+            },
+          ),
+        ],
       ),
       body: Consumer<DeviceProvider>(
         builder: (context, deviceProvider, child) {
