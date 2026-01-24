@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/models/ftms_device.dart';
@@ -187,43 +188,63 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
 
   void _startScan(BuildContext context) async {
     final deviceProvider = context.read<DeviceProvider>();
-    
-    // Show scanning dialog with cancel button
-    showDialog(
+
+    // Track if user cancelled
+    bool cancelled = false;
+    // Create a completer to close the dialog when scan completes
+    final dialogCompleter = Completer<void>();
+
+    // Start scan immediately (in background)
+    Future<void> scanFuture = () async {
+      await deviceProvider.startScan();
+      if (!cancelled && !dialogCompleter.isCompleted) {
+        dialogCompleter.complete();
+      }
+    }();
+
+    // Show dialog and close it when scan completes or user cancels
+    await showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Scanning for Devices'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: const [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Looking for FTMS devices...'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(dialogContext);
-            },
-            child: const Text('Cancel'),
+      builder: (dialogContext) {
+        // When scan completes, pop the dialog if still open
+        dialogCompleter.future.then((_) {
+          if (Navigator.of(dialogContext, rootNavigator: true).canPop()) {
+            Navigator.of(dialogContext, rootNavigator: true).pop();
+          }
+        });
+        return AlertDialog(
+          title: const Text('Scanning for Devices'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text('Looking for FTMS devices...'),
+            ],
           ),
-        ],
-      ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                cancelled = true;
+                deviceProvider.stopScan();
+                if (!dialogCompleter.isCompleted) dialogCompleter.complete();
+              },
+              child: const Text('Cancel'),
+            ),
+          ],
+        );
+      },
     );
-    
-    // Start scanning
-    await deviceProvider.startScan();
-    
-    // Close dialog if still showing
-    if (context.mounted) {
-      Navigator.of(context, rootNavigator: true).popUntil((route) => route.isFirst || !route.willHandlePopInternally);
-      
-      // Show result
-      final deviceCount = deviceProvider.availableDevices.where((d) => !d.isVirtual).length;
-      if (deviceCount == 0) {
-        _showNoDevicesFound(context);
+
+    // Wait for scan to finish if not cancelled
+    if (!cancelled) {
+      await scanFuture;
+      if (context.mounted) {
+        final deviceCount = deviceProvider.availableDevices.where((d) => !d.isVirtual).length;
+        if (deviceCount == 0) {
+          _showNoDevicesFound(context);
+        }
       }
     }
   }
