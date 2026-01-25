@@ -3,14 +3,15 @@ import 'dart:developer' as developer;
 import 'dart:typed_data';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/device_data_snapshot.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/ftms_device.dart' as model;
+import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
 
 /// FTMS Bluetooth service for real fitness equipment
 /// This is a stub implementation - full Bluetooth integration to be completed
-class FTMSService extends VirtualFitnessDevice {
-  final FTMSDevice device;
-  final DeviceType _deviceType;
+class FTMSDevice implements FitnessDevice {
+  final model.FTMSDevice device;
+  final model.DeviceType _deviceType;
   
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _dataCharacteristic;
@@ -70,7 +71,7 @@ class FTMSService extends VirtualFitnessDevice {
 
   /// Detect if a BLE device is a supported FTMS device
   /// Returns FTMSDevice if supported, null otherwise
-  static Future<FTMSDevice?> detectDevice(BluetoothDevice bleDevice) async {
+  static Future<model.FTMSDevice?> detectDevice(BluetoothDevice bleDevice) async {
     try {
       // Connect to device with timeout
       await bleDevice.connect(timeout: const Duration(seconds: 5));
@@ -97,13 +98,13 @@ class FTMSService extends VirtualFitnessDevice {
       await Future.delayed(const Duration(milliseconds: 500));
       
       // Determine device type - prefer bike if both are present
-      DeviceType deviceType = DeviceType.indoorBike;
+      model.DeviceType deviceType = model.DeviceType.indoorBike;
       if (hasTreadmillData && !hasBikeData) {
-        deviceType = DeviceType.treadmill;
+        deviceType = model.DeviceType.treadmill;
       }
       
       // Return FTMSDevice model
-      return FTMSDevice(
+      return model.FTMSDevice(
         id: bleDevice.remoteId.str,
         name: bleDevice.platformName.isNotEmpty 
             ? bleDevice.platformName 
@@ -122,10 +123,10 @@ class FTMSService extends VirtualFitnessDevice {
     }
   }
 
-  FTMSService({required this.device}) : _deviceType = device.deviceType;
+  FTMSDevice({required this.device}) : _deviceType = device.deviceType;
 
   @override
-  DeviceType get deviceType => _deviceType;
+  model.DeviceType get deviceType => _deviceType;
 
   /// Connect to the device
   Future<bool> connect() async {
@@ -177,7 +178,7 @@ class FTMSService extends VirtualFitnessDevice {
       developer.log('Found FTMS service with ${ftmsService.characteristics.length} characteristics', name: 'FTMSService');
       
       // Read device capabilities for bikes
-      if (_deviceType == DeviceType.indoorBike) {
+      if (_deviceType == model.DeviceType.indoorBike) {
         // Read fitness machine features (silently)
         try {
           final featureChar = ftmsService.characteristics.firstWhere(
@@ -204,7 +205,7 @@ class FTMSService extends VirtualFitnessDevice {
       }
       
       // Read incline range for treadmills
-      if (_deviceType == DeviceType.treadmill) {
+      if (_deviceType == model.DeviceType.treadmill) {
         try {
           final inclineRangeChar = ftmsService.characteristics.firstWhere(
             (c) => _normalizeUuid(c.uuid.toString()) == _normalizeUuid(inclineRangeUuid),
@@ -222,7 +223,7 @@ class FTMSService extends VirtualFitnessDevice {
       }
 
       // Find the appropriate data characteristic based on device type
-      final dataCharUuid = _deviceType == DeviceType.indoorBike 
+        final dataCharUuid = _deviceType == model.DeviceType.indoorBike 
           ? indoorBikeDataUuid 
           : treadmillDataUuid;
       
@@ -258,7 +259,7 @@ class FTMSService extends VirtualFitnessDevice {
       
       _dataSubscription = _dataCharacteristic!.lastValueStream.listen((value) {
         if (value.isNotEmpty) {
-          final snapshot = _deviceType == DeviceType.indoorBike
+            final snapshot = _deviceType == model.DeviceType.indoorBike
               ? _parseIndoorBikeData(value)
               : _parseTreadmillData(value);
           _lastSnapshot = snapshot;

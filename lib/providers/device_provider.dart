@@ -3,12 +3,13 @@ import 'dart:developer' as developer;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/ftms_device.dart' as model;
 import 'package:free_ride/services/device_storage_service.dart';
-import 'package:free_ride/services/virtual_device_interface.dart';
+
 import 'package:free_ride/services/virtual_indoor_bike.dart';
 import 'package:free_ride/services/virtual_treadmill.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/ftms_service.dart' as ftms;
+import 'package:free_ride/services/fitness_device.dart';
 
 class DeviceProvider extends ChangeNotifier {
     /// Local cache of discovered/tested device addresses
@@ -17,20 +18,20 @@ class DeviceProvider extends ChangeNotifier {
 
   /// Service detector functions registry
   /// Each detector attempts to identify and configure a BLE device
-  static final List<Future<FTMSDevice?> Function(BluetoothDevice)> _detectors = [
-    FTMSService.detectDevice,
+  static final List<Future<model.FTMSDevice?> Function(BluetoothDevice)> _detectors = [
+    ftms.FTMSDevice.detectDevice,
     // Future device services can be registered here
   ];
 
-  FTMSDevice? _selectedDevice;
-  VirtualFitnessDevice? _activeDevice;
+  model.FTMSDevice? _selectedDevice;
+  FitnessDevice? _activeDevice;
   bool _isScanning = false;
-  List<FTMSDevice> _availableDevices = [];
+  List<model.FTMSDevice> _availableDevices = [];
 
-  FTMSDevice? get selectedDevice => _selectedDevice;
-  VirtualFitnessDevice? get activeDevice => _activeDevice;
+  model.FTMSDevice? get selectedDevice => _selectedDevice;
+  FitnessDevice? get activeDevice => _activeDevice;
   bool get isScanning => _isScanning;
-  List<FTMSDevice> get availableDevices => _availableDevices;
+  List<model.FTMSDevice> get availableDevices => _availableDevices;
   bool get hasDeviceSelected => _selectedDevice != null;
 
   /// Initialize provider and load last used device
@@ -54,29 +55,29 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   /// Select a device
-  Future<void> selectDevice(FTMSDevice device) async {
+  Future<void> selectDevice(model.FTMSDevice device) async {
     // Dispose old active device if it exists
     if (_activeDevice != null && _selectedDevice?.id != device.id) {
       _activeDevice?.dispose();
       _activeDevice = null;
     }
-    
+
     _selectedDevice = device;
     await _storage.setLastUsedDeviceId(device.id);
-    
+
     // Only create new active device if we don't have one or device changed
     if (_activeDevice == null) {
       _activeDevice = _createActiveDevice(device);
     }
-    
+
     notifyListeners();
   }
 
   /// Create active device instance based on type
-  VirtualFitnessDevice _createActiveDevice(FTMSDevice device) {
+  FitnessDevice _createActiveDevice(model.FTMSDevice device) {
     if (device.isVirtual) {
       // Create virtual device
-      if (device.deviceType == DeviceType.indoorBike) {
+      if (device.deviceType == model.DeviceType.indoorBike) {
         return VirtualIndoorBike(
           targetSpeed: device.effortLevel,
         );
@@ -88,7 +89,7 @@ class DeviceProvider extends ChangeNotifier {
     } else {
       // Create FTMS service for real device (don't connect yet)
       // Connection will be initiated when ride starts
-      return FTMSService(device: device);
+      return ftms.FTMSDevice(device: device);
     }
   }
 
@@ -130,14 +131,12 @@ class DeviceProvider extends ChangeNotifier {
       final device = _storage.getDevice(deviceId);
       if (device != null) {
         _selectedDevice = device;
-        
         // Only recreate active device for virtual devices
         // Real FTMS devices should maintain their connection
         if (device.isVirtual && _activeDevice != null) {
           _activeDevice?.dispose();
           _activeDevice = _createActiveDevice(device);
         }
-        
         notifyListeners();
       }
     }

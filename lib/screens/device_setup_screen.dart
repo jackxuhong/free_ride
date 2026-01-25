@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:free_ride/models/ftms_device.dart';
+import 'package:free_ride/models/ftms_device.dart' as model;
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/ftms_service.dart' as ftms_service;
 import 'package:free_ride/widgets/virtual_device_controller.dart';
 
 class DeviceSetupScreen extends StatefulWidget {
@@ -78,13 +78,13 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                     color: isSelected ? Colors.blue.shade50 : null,
                     child: ListTile(
                       leading: Icon(
-                        device.deviceType == DeviceType.indoorBike
-                            ? Icons.directions_bike
-                            : Icons.directions_run,
+                        device.deviceType == model.DeviceType.indoorBike
+                          ? Icons.directions_bike
+                          : Icons.directions_run,
                         size: 32,
-                        color: device.deviceType == DeviceType.indoorBike
-                            ? Colors.blue
-                            : Colors.orange,
+                        color: device.deviceType == model.DeviceType.indoorBike
+                          ? Colors.blue
+                          : Colors.orange,
                       ),
                       title: Row(
                         children: [
@@ -115,7 +115,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                         ],
                       ),
                       subtitle: Text(
-                        device.deviceType == DeviceType.indoorBike
+                        device.deviceType == model.DeviceType.indoorBike
                             ? 'Indoor Bike'
                             : 'Treadmill',
                       ),
@@ -148,18 +148,14 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                   ),
                   
                   // Show virtual device controller if selected and virtual
-                  if (isSelected && device.isVirtual)
-                    VirtualDeviceController(device: device),
-                  
+                  if (isSelected && device.isVirtual && deviceProvider.selectedDevice != null)
+                    VirtualDeviceController(device: deviceProvider.selectedDevice!),
+
                   // Show device info if selected and real FTMS device
-                  if (isSelected && !device.isVirtual && deviceProvider.activeDevice != null)
+                  if (isSelected && !device.isVirtual && deviceProvider.activeDevice is ftms_service.FTMSDevice)
                     Builder(
                       builder: (context) {
-                        final activeDevice = deviceProvider.activeDevice;
-                        if (activeDevice is! FTMSService) {
-                          return const SizedBox.shrink();
-                        }
-                        
+                        final activeDevice = deviceProvider.activeDevice as ftms_service.FTMSDevice;
                         return Card(
                           margin: const EdgeInsets.only(left: 8, right: 8, bottom: 8),
                           child: Padding(
@@ -181,13 +177,13 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                                   value: activeDevice.isConnected ? 'Connected' : 'Disconnected',
                                   valueColor: activeDevice.isConnected ? Colors.green : Colors.orange,
                                 ),
-                                if (device.deviceType == DeviceType.indoorBike)
+                                if (device.deviceType == model.DeviceType.indoorBike)
                                   _InfoRow(
                                     icon: Icons.fitness_center,
                                     label: 'Resistance Range',
                                     value: '${activeDevice.minResistance} - ${activeDevice.maxResistance}',
                                   ),
-                                if (device.deviceType == DeviceType.treadmill)
+                                if (device.deviceType == model.DeviceType.treadmill)
                                   _InfoRow(
                                     icon: Icons.terrain,
                                     label: 'Incline Range',
@@ -305,7 +301,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     );
   }
   
-  void _confirmDeleteDevice(BuildContext context, FTMSDevice device) {
+  void _confirmDeleteDevice(BuildContext context, model.FTMSDevice device) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -369,12 +365,11 @@ class _InfoRow extends StatelessWidget {
         children: [
           Icon(icon, size: 20, color: Colors.grey[600]),
           const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              label,
-              style: TextStyle(color: Colors.grey[700]),
-            ),
+          Text(
+            label,
+            style: TextStyle(color: Colors.grey[700]),
           ),
+          const SizedBox(width: 12),
           Text(
             value,
             style: TextStyle(
@@ -385,5 +380,4 @@ class _InfoRow extends StatelessWidget {
         ],
       ),
     );
-  }
-}
+  }}

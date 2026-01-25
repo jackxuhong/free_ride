@@ -3,10 +3,29 @@ import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
 import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
+import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/services/heart_rate_simulator.dart';
 
 /// Virtual indoor bike simulator
-class VirtualIndoorBike extends VirtualFitnessDevice {
+class VirtualIndoorBike implements FitnessDevice {
+    // Always connected for virtual devices
+    @override
+    bool get isConnected => true;
+
+    @override
+    Stream<bool> get connectionState => Stream<bool>.value(true);
+
+    @override
+    int get minResistance => 1;
+
+    @override
+    int get maxResistance => 20;
+
+    @override
+    double get minIncline => -3.0;
+
+    @override
+    double get maxIncline => 15.0;
   double _targetSpeed = 25.0; // Target speed in km/h
   double _resistanceLevel = 10.0; // 1-20
   double _currentSpeed = 0.0;

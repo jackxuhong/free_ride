@@ -9,8 +9,9 @@ import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
+import 'package:free_ride/services/ftms_service.dart' as ftms;
 import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -53,7 +54,7 @@ class RideProvider with ChangeNotifier {
   List<PowerSample> _powerSamples = [];
 
   // Device tracking
-  VirtualFitnessDevice? _activeDevice;
+  FitnessDevice? _activeDevice;
   double _currentCadence = 0.0;
   double _currentHeartRate = 0.0;
   List<double> _cadenceSamples = [];
@@ -90,7 +91,7 @@ class RideProvider with ChangeNotifier {
   double get currentCadence => _currentCadence;
   double get currentHeartRate => _currentHeartRate;
   double get workoutIntensity => _workoutIntensity;
-  VirtualFitnessDevice? get activeDevice => _activeDevice;
+  FitnessDevice? get activeDevice => _activeDevice;
   double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
@@ -114,7 +115,7 @@ class RideProvider with ChangeNotifier {
   /// Initialize ride with a device (new method for device integration)
   void startRideWithDevice(
     SavedRoute route,
-    VirtualFitnessDevice device, {
+    FitnessDevice device, {
     Uint8List? thumbnail,
   }) async {
     _route = route;
@@ -131,20 +132,13 @@ class RideProvider with ChangeNotifier {
     _workoutIntensity = 1.0;
     
     // Connect to device if it's a real FTMS device
-    if (device is FTMSService) {
-      final connected = await device.connect();
-      // Don't show error - auto-reconnect will handle connection issues
-      // if (!connected) {
-      //   print('Failed to connect to FTMS device');
-      // }
-      
+    if (device is ftms.FTMSDevice) {
+      await device.connect();
       // Listen to connection state for auto-pause/resume
       _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
         if (!isConnected && _status == RideStatus.running) {
-          // Auto-pause when device disconnects during ride
           pauseRide();
         } else if (isConnected && _status == RideStatus.paused) {
-          // Auto-resume when device reconnects (only if paused by disconnect)
           resumeRide();
         }
       });
@@ -221,8 +215,8 @@ class RideProvider with ChangeNotifier {
     _simulationTimer?.cancel();
     
     // Disconnect device if it's a real FTMS device
-    if (_activeDevice is FTMSService) {
-      await (_activeDevice as FTMSService).disconnect();
+    if (_activeDevice is ftms.FTMSDevice) {
+      await (_activeDevice as ftms.FTMSDevice).disconnect();
     }
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
@@ -377,28 +371,19 @@ class RideProvider with ChangeNotifier {
       }
 
       // Send control commands to device based on route grade and intensity
-      final isBike = _activeDevice is FTMSService 
-          ? (_activeDevice as FTMSService).deviceType == DeviceType.indoorBike
-          : _activeDevice.runtimeType.toString().contains('Bike');
-      
+      final isBike = _activeDevice?.deviceType == DeviceType.indoorBike;
       if (isBike) {
-        // Map grade percentage to resistance and apply intensity multiplier
-        // Grade is stored as decimal (0.05 = 5%), convert to percentage first
         final gradePercent = _currentGrade * 100;
-        // Get device resistance range (default 1-20 if not FTMS)
-        final minRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).minResistance.toDouble() : 1.0;
-        final maxRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).maxResistance.toDouble() : 20.0;
-        // Map -5% to 15% grade range to device resistance range
-        // 0% = 25% of range, scaling factor based on range
+        final minRes = _activeDevice?.minResistance.toDouble() ?? 1.0;
+        final maxRes = _activeDevice?.maxResistance.toDouble() ?? 20.0;
         final rangeSize = maxRes - minRes;
         final baseResistance = (gradePercent * (rangeSize / 20.0) + minRes + (rangeSize * 0.25)).clamp(minRes, maxRes);
         final adjustedResistance = (baseResistance * _workoutIntensity).clamp(minRes, maxRes).round();
-        _activeDevice!.sendControlCommand(SetResistance(adjustedResistance));
+        _activeDevice?.sendControlCommand(SetResistance(adjustedResistance));
       } else {
-        // Map grade to incline percentage and apply intensity multiplier
         final baseIncline = (_currentGrade * 100).clamp(-3.0, 15.0);
         final adjustedIncline = (baseIncline * _workoutIntensity).clamp(-3.0, 15.0);
-        _activeDevice!.sendControlCommand(SetIncline(adjustedIncline));
+        _activeDevice?.sendControlCommand(SetIncline(adjustedIncline));
       }
 
       // Use device power if available

@@ -2,10 +2,29 @@ import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
 import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
+import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/services/heart_rate_simulator.dart';
 
 /// Virtual treadmill simulator
-class VirtualTreadmill extends VirtualFitnessDevice {
+class VirtualTreadmill implements FitnessDevice {
+    // Always connected for virtual devices
+    @override
+    bool get isConnected => true;
+
+    @override
+    Stream<bool> get connectionState => Stream<bool>.value(true);
+
+    @override
+    int get minResistance => 1;
+
+    @override
+    int get maxResistance => 20;
+
+    @override
+    double get minIncline => -3.0;
+
+    @override
+    double get maxIncline => 15.0;
   double _userSpeed = 10.0; // km/h - user controls this
   double _targetIncline = 0.0; // target incline from route
   double _currentIncline = 0.0; // actual incline (smoothed)
