@@ -196,7 +196,8 @@ class DeviceProvider extends ChangeNotifier {
         for (var result in results) {
           if (!scannedDevices.contains(result.device)) {
             scannedDevices.add(result.device);
-            developer.log('Found BLE device: ${result.device.platformName.isNotEmpty ? result.device.platformName : result.device.remoteId}', name: 'DeviceProvider');
+            final deviceName = result.device.platformName.isNotEmpty ? ' (${result.device.platformName})' : '';
+            developer.log('Found BLE device: ${result.device.remoteId}$deviceName', name: 'DeviceProvider');
           }
         }
       });
@@ -219,20 +220,24 @@ class DeviceProvider extends ChangeNotifier {
       // Process each discovered device sequentially
       developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
       for (var bleDevice in scannedDevices) {
+        /*
         // Skip devices with no name (often not fitness equipment)
         if (bleDevice.platformName.isEmpty) {
           developer.log('Skipping unnamed device: ${bleDevice.remoteId}', name: 'DeviceProvider');
           continue;
         }
+        */
 
         // Skip if already discovered/tested in cache
         final cacheKey = bleDevice.remoteId.toString();
         if (_deviceCache.contains(cacheKey)) {
-          developer.log('Skipping cached device: ${bleDevice.platformName}', name: 'DeviceProvider');
+          final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+          developer.log('Skipping cached device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
           continue;
         }
 
-        developer.log('Testing device: ${bleDevice.platformName}', name: 'DeviceProvider');
+        final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+        developer.log('Testing device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
 
         // Try each registered detector
         for (var detector in _detectors) {
@@ -262,7 +267,8 @@ class DeviceProvider extends ChangeNotifier {
               // First match wins - stop checking other detectors
               break;
             } else {
-              developer.log('Device ${bleDevice.platformName} not supported by this detector', name: 'DeviceProvider');
+              final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+              developer.log('Device ${bleDevice.remoteId}$deviceName not supported by this detector', name: 'DeviceProvider');
             }
           } catch (e) {
             developer.log('Detector error for ${bleDevice.platformName}: $e', name: 'DeviceProvider', level: 900, error: e);
