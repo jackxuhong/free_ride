@@ -1,3 +1,5 @@
+import 'dart:developer' as developer;
+
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:free_ride/models/user_profile.dart';
 
@@ -23,8 +25,8 @@ class ProfileService {
     } catch (e) {
       // If there's an error opening the box (e.g., schema mismatch),
       // delete the corrupted box and create a new one
-      print('Error opening profile box: $e');
-      print('Deleting corrupted profile box and creating new one...');
+      developer.log('Error opening profile box: $e', name: 'ProfileService', level: 1000, error: e);
+      developer.log('Deleting corrupted profile box and creating new one...', name: 'ProfileService', level: 900);
       await Hive.deleteBoxFromDisk(_boxName);
       _box = await Hive.openBox<UserProfile>(_boxName);
     }

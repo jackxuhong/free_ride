@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:http/http.dart' as http;
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -48,8 +50,8 @@ class OpenRouteService {
     if (response.statusCode == 200) {
       return json.decode(response.body);
     } else {
-      print('Route API Error: ${response.statusCode}');
-      print('Response body: ${response.body}');
+      developer.log('Route API Error: ${response.statusCode}', name: 'OpenRouteService', level: 1000);
+      developer.log('Response body: ${response.body}', name: 'OpenRouteService', level: 1000);
       throw Exception(
         'Failed to get route: ${response.statusCode} ${response.body}',
       );

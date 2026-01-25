@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:developer' as developer;
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:free_ride/models/ftms_device.dart';
@@ -8,7 +11,16 @@ import 'package:free_ride/services/virtual_treadmill.dart';
 import 'package:free_ride/services/ftms_service.dart';
 
 class DeviceProvider extends ChangeNotifier {
+    /// Local cache of discovered/tested device addresses
+    final Set<String> _deviceCache = <String>{};
   final DeviceStorageService _storage = DeviceStorageService();
+
+  /// Service detector functions registry
+  /// Each detector attempts to identify and configure a BLE device
+  static final List<Future<FTMSDevice?> Function(BluetoothDevice)> _detectors = [
+    FTMSService.detectDevice,
+    // Future device services can be registered here
+  ];
 
   FTMSDevice? _selectedDevice;
   VirtualFitnessDevice? _activeDevice;
@@ -131,38 +143,148 @@ class DeviceProvider extends ChangeNotifier {
     }
   }
 
-  /// Start scanning for real FTMS devices
+  /// Start scanning for all BLE devices
   Future<void> startScan() async {
     if (_isScanning) return;
-    
+
+    developer.log('Starting BLE device scan...', name: 'DeviceProvider');
     _isScanning = true;
     notifyListeners();
 
     try {
-      // Scan for FTMS devices with type detection
-      final deviceInfoList = await FTMSService.scanForDevices();
-      
-      // Convert to FTMSDevice models and save
-      for (var deviceInfo in deviceInfoList) {
-        final bleDevice = deviceInfo['device'] as BluetoothDevice;
-        final deviceType = deviceInfo['deviceType'] as DeviceType;
-        
-        // Check if already saved
-        final existing = _availableDevices.where((d) => d.deviceAddress == bleDevice.remoteId.str).firstOrNull;
-        if (existing == null) {
-          final device = FTMSDevice(
-            id: bleDevice.remoteId.str,
-            name: bleDevice.platformName.isNotEmpty ? bleDevice.platformName : 'FTMS Device',
-            deviceType: DeviceType.indoorBike, // Default, will be determined on connect
-            isVirtual: false,
-            deviceAddress: bleDevice.remoteId.str,
-          );
-          await _storage.saveDevice(device);
-        }
+      // Check if Bluetooth is available
+      if (await FlutterBluePlus.isSupported == false) {
+        developer.log('Bluetooth not supported on this device', name: 'DeviceProvider', level: 1000);
+        throw Exception('Bluetooth not supported on this device');
       }
 
+      // Check Bluetooth adapter state
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      developer.log('Bluetooth adapter state: $adapterState', name: 'DeviceProvider');
+      
+      if (adapterState != BluetoothAdapterState.on) {
+        developer.log('Waiting for Bluetooth to turn on...', name: 'DeviceProvider', level: 900);
+        // Wait for Bluetooth to turn on (with timeout)
+        final stateCompleter = Completer<void>();
+        StreamSubscription? stateSubscription;
+        
+        stateSubscription = FlutterBluePlus.adapterState.listen((state) {
+          developer.log('Bluetooth state changed to: $state', name: 'DeviceProvider');
+          if (state == BluetoothAdapterState.on) {
+            stateCompleter.complete();
+            stateSubscription?.cancel();
+          }
+        });
+        
+        // Wait up to 5 seconds for Bluetooth to turn on
+        await stateCompleter.future.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () {
+            stateSubscription?.cancel();
+            developer.log('Bluetooth did not turn on within 5 seconds', name: 'DeviceProvider', level: 1000);
+            throw Exception('Bluetooth is not turned on. Please enable Bluetooth and try again.');
+          },
+        );
+        developer.log('Bluetooth is now ready', name: 'DeviceProvider');
+      }
+
+      // Scan for ALL BLE devices (no service filter)
+      final scannedDevices = <BluetoothDevice>[];
+
+      // Set up scan results listener BEFORE starting scan
+      final subscription = FlutterBluePlus.scanResults.listen((results) {
+        for (var result in results) {
+          if (!scannedDevices.contains(result.device)) {
+            scannedDevices.add(result.device);
+            final deviceName = result.device.platformName.isNotEmpty ? ' (${result.device.platformName})' : '';
+            developer.log('Found BLE device: ${result.device.remoteId}$deviceName', name: 'DeviceProvider');
+          }
+        }
+      });
+
+      try {
+        // Start scan with timeout (will auto-stop after 10 seconds)
+        developer.log('Starting BLE scan (10 second timeout)...', name: 'DeviceProvider');
+        await FlutterBluePlus.startScan(
+          timeout: const Duration(seconds: 10),
+        );
+
+        // Wait for scan to complete (timeout will handle stopping)
+        await Future.delayed(const Duration(seconds: 10));
+        developer.log('BLE scan completed. Found ${scannedDevices.length} devices', name: 'DeviceProvider');
+      } finally {
+        // Clean up subscription
+        await subscription.cancel();
+      }
+
+      // Process each discovered device sequentially
+      developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
+      for (var bleDevice in scannedDevices) {
+        /*
+        // Skip devices with no name (often not fitness equipment)
+        if (bleDevice.platformName.isEmpty) {
+          developer.log('Skipping unnamed device: ${bleDevice.remoteId}', name: 'DeviceProvider');
+          continue;
+        }
+        */
+
+        // Skip if already discovered/tested in cache
+        final cacheKey = bleDevice.remoteId.toString();
+        if (_deviceCache.contains(cacheKey)) {
+          final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+          developer.log('Skipping cached device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
+          continue;
+        }
+
+        final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+        developer.log('Testing device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
+
+        // Try each registered detector
+        for (var detector in _detectors) {
+          try {
+            final ftmsDevice = await detector(bleDevice);
+
+            if (ftmsDevice != null) {
+              // Device detected! Check if already saved
+              final existing = _availableDevices
+                  .where((d) => d.deviceAddress == ftmsDevice.deviceAddress)
+                  .firstOrNull;
+
+              if (existing == null) {
+                // Save new device
+                await _storage.saveDevice(ftmsDevice);
+                developer.log('Discovered new ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}', name: 'DeviceProvider', level: 800);
+                debugPrint('Discovered ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}');
+              } else {
+                // Update last connected time
+                final updated = existing.copyWith(lastConnected: DateTime.now());
+                await _storage.saveDevice(updated);
+                developer.log('Updated existing device: ${ftmsDevice.name}', name: 'DeviceProvider');
+              }
+
+              // Add to cache
+              _deviceCache.add(cacheKey);
+              // First match wins - stop checking other detectors
+              break;
+            } else {
+              final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
+              developer.log('Device ${bleDevice.remoteId}$deviceName not supported by this detector', name: 'DeviceProvider');
+            }
+          } catch (e) {
+            developer.log('Detector error for ${bleDevice.platformName}: $e', name: 'DeviceProvider', level: 900, error: e);
+            debugPrint('Detector error for ${bleDevice.platformName}: $e');
+            // Continue to next detector
+          }
+        }
+        // Add to cache even if not supported (so we don't test again)
+        _deviceCache.add(cacheKey);
+      }
+
+      // Reload devices list
       await _loadDevices();
+      developer.log('Device scan completed. Total devices available: ${_availableDevices.length}', name: 'DeviceProvider', level: 800);
     } catch (e) {
+      developer.log('Error scanning: $e', name: 'DeviceProvider', level: 1000, error: e);
       debugPrint('Error scanning: $e');
     } finally {
       _isScanning = false;
@@ -193,6 +315,13 @@ class DeviceProvider extends ChangeNotifier {
   /// Refresh devices list
   Future<void> refreshDevices() async {
     await _loadDevices();
+  }
+
+  /// Clear the local device cache
+  void clearDeviceCache() {
+    _deviceCache.clear();
+    developer.log('Device cache cleared', name: 'DeviceProvider');
+    notifyListeners();
   }
 
   @override
