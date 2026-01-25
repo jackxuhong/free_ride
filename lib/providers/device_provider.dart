@@ -219,6 +219,7 @@ class DeviceProvider extends ChangeNotifier {
       // Process each discovered device sequentially
       developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
       for (var bleDevice in scannedDevices) {
+        final deviceName = bleDevice.remoteId.toString() + (bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '');        
         /*
         // Skip devices with no name (often not fitness equipment)
         if (bleDevice.platformName.isEmpty) {
@@ -230,13 +231,11 @@ class DeviceProvider extends ChangeNotifier {
         // Skip if already discovered/tested in cache
         final cacheKey = bleDevice.remoteId.toString();
         if (_deviceCache.contains(cacheKey)) {
-          final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
-          developer.log('Skipping cached device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
+          developer.log('Skipping cached device: $deviceName', name: 'DeviceProvider');
           continue;
         }
 
-        final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
-        developer.log('Testing device: ${bleDevice.remoteId}$deviceName', name: 'DeviceProvider');
+        developer.log('Testing device: $deviceName', name: 'DeviceProvider');
 
         // Try each registered detector
         for (var detector in _detectors) {
@@ -252,8 +251,8 @@ class DeviceProvider extends ChangeNotifier {
               if (existing == null) {
                 // Save new device
                 await _storage.saveDevice(ftmsDevice);
-                developer.log('Discovered new ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}', name: 'DeviceProvider', level: 800);
-                debugPrint('Discovered ${ftmsDevice.deviceType.name}: ${ftmsDevice.name}');
+                developer.log('Discovered new ${ftmsDevice.deviceType.name}: ${ftmsDevice.name} - $deviceName', name: 'DeviceProvider', level: 800);
+                debugPrint('Discovered ${ftmsDevice.deviceType.name}: ${ftmsDevice.name} - $deviceName');
               } else {
                 // Update last connected time
                 final updated = existing.copyWith(lastConnected: DateTime.now());

@@ -104,7 +104,7 @@ class FTMSDevice implements FitnessDevice {
       }
       
       // Return FTMSDevice model
-      return model.FTMSDevice(
+      final device = model.FTMSDevice(
         id: bleDevice.remoteId.str,
         name: bleDevice.platformName.isNotEmpty 
             ? bleDevice.platformName 
@@ -114,6 +114,8 @@ class FTMSDevice implements FitnessDevice {
         deviceAddress: bleDevice.remoteId.str,
         lastConnected: DateTime.now(),
       );
+      developer.log('Detected FTMS device: ${device.name} (${device.deviceAddress})', name: 'FTMSService', level: 1000);
+      return device;
     } catch (e) {
       // Not a supported FTMS device or connection failed
       try {
