@@ -8,7 +8,7 @@ import 'package:free_ride/services/device_storage_service.dart';
 
 import 'package:free_ride/services/virtual_indoor_bike.dart';
 import 'package:free_ride/services/virtual_treadmill.dart';
-import 'package:free_ride/services/ftms_service.dart' as ftms;
+import 'package:free_ride/services/ftms_device.dart' as ftms;
 import 'package:free_ride/services/fitness_device.dart';
 
 class DeviceProvider extends ChangeNotifier {

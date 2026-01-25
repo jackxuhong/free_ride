@@ -5,7 +5,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_service.dart' as ftms;
+import 'package:free_ride/services/ftms_device.dart' as ftms;
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';

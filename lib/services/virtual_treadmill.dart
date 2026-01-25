@@ -1,3 +1,5 @@
+
+
 import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
 import 'package:free_ride/models/ftms_device.dart';
@@ -7,6 +9,12 @@ import 'package:free_ride/services/heart_rate_simulator.dart';
 
 /// Virtual treadmill simulator
 class VirtualTreadmill implements FitnessDevice {
+
+      @override
+      Future<bool> connect() async => true;
+
+      @override
+      Future<void> disconnect() async {}
     // Always connected for virtual devices
     @override
     bool get isConnected => true;

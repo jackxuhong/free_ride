@@ -36,6 +36,12 @@ abstract class FitnessDevice {
   // Get FTMS data packet (for virtual devices to simulate real protocol)
   Uint8List getFTMSDataPacket();
 
+  // Connect to the device (no-op for virtual devices)
+  Future<bool> connect();
+
+  // Disconnect from the device (no-op for virtual devices)
+  Future<void> disconnect();
+
   // Dispose resources
   void dispose();
 }

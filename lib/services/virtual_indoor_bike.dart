@@ -1,3 +1,5 @@
+
+
 import 'dart:math';
 import 'dart:typed_data';
 import 'package:free_ride/models/device_data_snapshot.dart';
@@ -8,6 +10,12 @@ import 'package:free_ride/services/heart_rate_simulator.dart';
 
 /// Virtual indoor bike simulator
 class VirtualIndoorBike implements FitnessDevice {
+
+      @override
+      Future<bool> connect() async => true;
+
+      @override
+      Future<void> disconnect() async {}
     // Always connected for virtual devices
     @override
     bool get isConnected => true;

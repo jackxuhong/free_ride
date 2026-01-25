@@ -9,7 +9,6 @@ import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
-import 'package:free_ride/services/ftms_service.dart' as ftms;
 import 'package:free_ride/services/virtual_device_interface.dart';
 import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/utils/constants.dart';
@@ -60,7 +59,6 @@ class RideProvider with ChangeNotifier {
   List<double> _cadenceSamples = [];
   List<double> _heartRateSamples = [];
   double _workoutIntensity = 1.0;
-  StreamSubscription? _deviceConnectionSubscription;
   
   // Real-time calories tracking
   double _currentCalories = 0.0;
@@ -131,18 +129,16 @@ class RideProvider with ChangeNotifier {
     _activeDevice = device;
     _workoutIntensity = 1.0;
     
-    // Connect to device if it's a real FTMS device
-    if (device is ftms.FTMSDevice) {
-      await device.connect();
-      // Listen to connection state for auto-pause/resume
-      _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
-        if (!isConnected && _status == RideStatus.running) {
-          pauseRide();
-        } else if (isConnected && _status == RideStatus.paused) {
-          resumeRide();
-        }
-      });
-    }
+    // Connect to device (real or virtual)
+    await device.connect();
+    // Listen to connection state for auto-pause/resume
+    device.connectionState.listen((isConnected) {
+      if (!isConnected && _status == RideStatus.running) {
+        pauseRide();
+      } else if (isConnected && _status == RideStatus.paused) {
+        resumeRide();
+      }
+    });
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -214,10 +210,8 @@ class RideProvider with ChangeNotifier {
     _endTime = DateTime.now();
     _simulationTimer?.cancel();
     
-    // Disconnect device if it's a real FTMS device
-    if (_activeDevice is ftms.FTMSDevice) {
-      await (_activeDevice as ftms.FTMSDevice).disconnect();
-    }
+    // Disconnect device (real or virtual)
+    await _activeDevice?.disconnect();
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
