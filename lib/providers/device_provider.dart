@@ -9,6 +9,7 @@ import 'package:free_ride/services/device_storage_service.dart';
 import 'package:free_ride/services/virtual_indoor_bike.dart';
 import 'package:free_ride/services/virtual_treadmill.dart';
 import 'package:free_ride/services/ftms_device.dart' as ftms;
+import 'package:free_ride/services/echelon_device.dart';
 import 'package:free_ride/services/fitness_device.dart';
 
 class DeviceProvider extends ChangeNotifier {
@@ -19,6 +20,7 @@ class DeviceProvider extends ChangeNotifier {
   /// Service detector functions registry
   /// Each detector attempts to identify and configure a BLE device
   static final List<Future<model.FTMSDevice?> Function(BluetoothDevice)> _detectors = [
+    EchelonDevice.detectDevice, // Check Echelon first (quick name check)
     ftms.FTMSDevice.detectDevice,
     // Future device services can be registered here
   ];
@@ -87,8 +89,15 @@ class DeviceProvider extends ChangeNotifier {
         );
       }
     } else {
-      // Create FTMS service for real device (don't connect yet)
+      // Create appropriate device service for real device (don't connect yet)
       // Connection will be initiated when ride starts
+      
+      // Check if it's an Echelon device by name prefix
+      if (device.name.startsWith('ECH')) {
+        return EchelonDevice(device);
+      }
+      
+      // Default to FTMS device
       return ftms.FTMSDevice(device: device);
     }
   }
@@ -216,6 +225,16 @@ class DeviceProvider extends ChangeNotifier {
         await subscription.cancel();
       }
 
+      // Explicitly stop scan before processing (critical for iOS)
+      try {
+        await FlutterBluePlus.stopScan();
+        developer.log('Scan stopped, waiting before processing devices...', name: 'DeviceProvider');
+        // Give iOS time to fully stop scanning before connecting
+        await Future.delayed(const Duration(milliseconds: 2000));
+      } catch (e) {
+        developer.log('Error stopping scan: $e', name: 'DeviceProvider');
+      }
+
       // Process each discovered device sequentially
       developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
       for (var bleDevice in scannedDevices) {
@@ -237,13 +256,21 @@ class DeviceProvider extends ChangeNotifier {
 
         developer.log('Testing device: $deviceName', name: 'DeviceProvider');
 
+        // Track if we should cache this device
+        bool shouldCache = false;
+        bool deviceSupported = false;
+
         // Try each registered detector
         for (var detector in _detectors) {
           try {
             final ftmsDevice = await detector(bleDevice);
 
             if (ftmsDevice != null) {
-              // Device detected! Check if already saved
+              // Device detected!
+              deviceSupported = true;
+              shouldCache = true;
+              
+              // Check if already saved
               final existing = _availableDevices
                   .where((d) => d.deviceAddress == ftmsDevice.deviceAddress)
                   .firstOrNull;
@@ -260,22 +287,45 @@ class DeviceProvider extends ChangeNotifier {
                 developer.log('Updated existing device: ${ftmsDevice.name}', name: 'DeviceProvider');
               }
 
-              // Add to cache
-              _deviceCache.add(cacheKey);
               // First match wins - stop checking other detectors
               break;
             } else {
               final deviceName = bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '';
               developer.log('Device ${bleDevice.remoteId}$deviceName not supported by this detector', name: 'DeviceProvider');
+              // Detector checked and returned null (not supported) - this is definitive
+              shouldCache = true;
             }
           } catch (e) {
-            developer.log('Detector error for ${bleDevice.platformName}: $e', name: 'DeviceProvider', level: 900, error: e);
-            debugPrint('Detector error for ${bleDevice.platformName}: $e');
-            // Continue to next detector
+            // Check if it's a timeout error
+            final errorStr = e.toString().toLowerCase();
+            if (errorStr.contains('timeout') || errorStr.contains('timed out')) {
+              developer.log('Detector timeout for ${bleDevice.platformName}: $e - will retry on next scan', name: 'DeviceProvider', level: 900);
+              debugPrint('Detector timeout for ${bleDevice.platformName}: $e');
+              // Don't cache on timeout - allow retry
+              shouldCache = false;
+              break; // Skip remaining detectors for this device
+            } else {
+              developer.log('Detector error for ${bleDevice.platformName}: $e', name: 'DeviceProvider', level: 900, error: e);
+              debugPrint('Detector error for ${bleDevice.platformName}: $e');
+              // Other errors are definitive failures - cache it
+              shouldCache = true;
+              // Continue to next detector
+            }
           }
         }
-        // Add to cache even if not supported (so we don't test again)
-        _deviceCache.add(cacheKey);
+        
+        // Only add to cache if detection completed successfully
+        // Do NOT cache on timeout - allow retry on next scan
+        if (shouldCache) {
+          _deviceCache.add(cacheKey);
+          if (deviceSupported) {
+            developer.log('Cached supported device: $deviceName', name: 'DeviceProvider');
+          } else {
+            developer.log('Cached unsupported device: $deviceName', name: 'DeviceProvider');
+          }
+        } else {
+          developer.log('Not caching device due to timeout: $deviceName', name: 'DeviceProvider');
+        }
       }
 
       // Reload devices list

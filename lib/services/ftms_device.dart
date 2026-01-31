@@ -117,6 +117,16 @@ class FTMSDevice implements FitnessDevice {
       developer.log('Detected FTMS device: ${device.name} (${device.deviceAddress})', name: 'FTMSService', level: 1000);
       return device;
     } catch (e) {
+      // Check if it's a timeout - if so, rethrow so provider can handle retry logic
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('timeout') || errorStr.contains('timed out')) {
+        developer.log('Connection timeout for FTMS device - rethrowing for retry', name: 'FTMSService');
+        try {
+          await bleDevice.disconnect();
+        } catch (_) {}
+        rethrow; // Let provider handle timeout
+      }
+      
       // Not a supported FTMS device or connection failed
       try {
         await bleDevice.disconnect();
