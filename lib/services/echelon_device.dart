@@ -96,19 +96,75 @@ class EchelonDevice implements FitnessDevice {
     try {
       developer.log('Connecting to Echelon device: ${device.name}');
       
-      // Find the device
-      final devices = FlutterBluePlus.connectedDevices;
-      _connectedDevice = devices.firstWhere(
-        (d) => d.remoteId.toString() == device.deviceAddress,
-        orElse: () => throw Exception('Device not found in connected devices'),
-      );
-      
-      // If not already connected, connect
-      if (_connectedDevice!.isDisconnected) {
-        await _connectedDevice!.connect(timeout: const Duration(seconds: 10));
+      if (device.deviceAddress == null) {
+        developer.log('Cannot connect: device address is null');
+        return false;
       }
       
+
+      // First, check if already connected
+      final connectedDevices = FlutterBluePlus.connectedDevices;
+      BluetoothDevice? foundDevice;
+      for (var d in connectedDevices) {
+        if (d.remoteId.toString() == device.deviceAddress) {
+          foundDevice = d;
+          break;
+        }
+      }
+
+      // If not connected, we need to scan to find the device (iOS requirement)
+      if (foundDevice == null) {
+        developer.log('Device not connected, scanning to find it...');
+
+        final completer = Completer<BluetoothDevice?>();
+        late StreamSubscription subscription;
+
+        // Start scanning
+        subscription = FlutterBluePlus.scanResults.listen((results) async {
+          for (var result in results) {
+            if (result.device.remoteId.toString() == device.deviceAddress) {
+              developer.log('Found device in scan results');
+              await subscription.cancel();
+              await FlutterBluePlus.stopScan();
+              if (!completer.isCompleted) {
+                completer.complete(result.device);
+              }
+              return;
+            }
+          }
+        });
+
+        await FlutterBluePlus.startScan(
+          timeout: const Duration(seconds: 10),
+          continuousUpdates: true,
+          removeIfGone: const Duration(seconds: 15),
+        );
+
+        // Wait for device to be found or timeout
+        foundDevice = await completer.future.timeout(
+          const Duration(seconds: 10),
+          onTimeout: () => null,
+        );
+
+        // If not found, cancel subscription and stop scan after timeout
+        if (foundDevice == null) {
+          await subscription.cancel();
+          await FlutterBluePlus.stopScan();
+          throw Exception('Device not found in scan');
+        }
+      }
+
+      _connectedDevice = foundDevice;
+
+      // Now connect to the device
+      developer.log('Connecting to device...');
+      await _connectedDevice!.connect(timeout: const Duration(seconds: 30));
+      developer.log('Connected successfully');
+      // Now it's safe to stop scan
+      await FlutterBluePlus.stopScan();
+
       // Discover services
+      developer.log('Discovering services...');
       final services = await _connectedDevice!.discoverServices();
       final echelonService = services.firstWhere(
         (s) => s.uuid.toString().toLowerCase() == echelonServiceUuid.toLowerCase(),
