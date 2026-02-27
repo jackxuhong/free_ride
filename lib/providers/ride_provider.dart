@@ -93,11 +93,11 @@ class RideProvider with ChangeNotifier {
   double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
-  void initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
+  Future<void> initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
-    _resetMetrics();
+    await _resetMetrics();
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
@@ -121,7 +121,7 @@ class RideProvider with ChangeNotifier {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
-    _resetMetrics();
+    await _resetMetrics();
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
@@ -212,7 +212,7 @@ class RideProvider with ChangeNotifier {
   Future<RideSummary> cancelRide() async {
     // If ride hasn't started, just reset without changing status to cancelled
     if (_startTime == null) {
-      _resetMetrics();
+      await _resetMetrics();
       notifyListeners();
       throw Exception('Cannot cancel a ride that has not started');
     }
@@ -229,7 +229,7 @@ class RideProvider with ChangeNotifier {
     // Auto-save cancelled ride to history
     _autoSaveRide(summary);
     
-    _resetMetrics();
+    await _resetMetrics();
     
     notifyListeners();
     return summary;
@@ -318,8 +318,9 @@ class RideProvider with ChangeNotifier {
     }
     
     _lastSummary = summary;
-    // Don't reset metrics here - let the next ride initialization do it
-    // This keeps startTime available for UI navigation check
+
+    // Disconnect device so the next ride can reconnect cleanly
+    await _activeDevice?.disconnect();
     
     // Auto-save completed ride to history
     await _autoSaveRide(summary);
@@ -605,7 +606,7 @@ class RideProvider with ChangeNotifier {
   }
 
   /// Resets all metrics and disconnects any active device.
-  void _resetMetrics() {
+  Future<void> _resetMetrics() async {
     _currentSegmentIndex = 0;
     _progressInSegment = 0.0;
     _currentPosition = null;
@@ -631,7 +632,7 @@ class RideProvider with ChangeNotifier {
     _cadenceSamples = [];
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
-    _activeDevice?.disconnect();
+    await _activeDevice?.disconnect();
     _activeDevice = null;
     _currentCalories = 0.0;
     _totalElevationGained = 0.0;
