@@ -7,6 +7,7 @@ import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/screens/simulation_screen.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
+import 'package:free_ride/providers/device_provider.dart';
 
 // Wrapper widget to expose refresh method
 class HistoryScreenRefresh extends StatefulWidget {
@@ -165,24 +166,34 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
 
     if (mounted) {
-      // Import required providers
       final routeProvider = context.read<RouteProvider>();
       final rideProvider = context.read<RideProvider>();
+      final deviceProvider = context.read<DeviceProvider>();
       
       routeProvider.setCurrentRoute(route);
-      rideProvider.initializeRide(route);
+
+      // Use the active device if one is selected, otherwise fall back to
+      // a device-less ride.
+      final device = deviceProvider.activeDevice;
+      if (device != null) {
+        await rideProvider.startRideWithDevice(route, device);
+      } else {
+        rideProvider.initializeRide(route);
+      }
       
       Navigator.of(context).push(
         MaterialPageRoute(
-          builder: (context) => SimulationScreen(),
+          builder: (context) => const SimulationScreen(),
         ),
       );
     }
   }
 
   Future<void> _restartRide(RideSummary summary) async {
-    // Same as continue for now - restart from beginning
-    _continueRide(summary);
+    // Restart is identical to continue — the ride begins from the start of
+    // the route because `initializeRide` / `startRideWithDevice` both reset
+    // all metrics including current segment index.
+    await _continueRide(summary);
   }
 
   Future<void> _clearAllHistory() async {

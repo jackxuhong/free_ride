@@ -39,6 +39,7 @@ class EchelonDevice implements FitnessDevice {
   // Polling counter for keep-alive packets
   int _pollCounter = 1;
   
+  bool _isReconnecting = false;
   final StreamController<bool> _connectionStateController = StreamController.broadcast();
   DeviceDataSnapshot? _lastSnapshot;
   
@@ -66,22 +67,51 @@ class EchelonDevice implements FitnessDevice {
   
   EchelonDevice(this.device);
   
-  /// Detects if a Bluetooth device is an Echelon bike
-  /// Returns FTMSDevice model if supported, null otherwise
-  /// 
-  /// Note: Unlike FTMS detection, this does NOT connect to the device.
-  /// Echelon bikes have known capabilities (resistance 1-32, indoor bike type),
-  /// so we only verify the device name. Actual connection happens when starting a ride.
+  /// Detects if a Bluetooth device is an Echelon bike.
+  ///
+  /// Returns [model.FTMSDevice] if supported, `null` otherwise.
+  /// Validates both device name prefix and BLE service to avoid
+  /// misidentifying non-Echelon devices (e.g., "ECHO_SPEAKER").
   static Future<model.FTMSDevice?> detectDevice(BluetoothDevice bleDevice) async {
     // Check if device name starts with "ECH"
     if (!bleDevice.platformName.startsWith('ECH')) {
       return null;
     }
     
-    developer.log('Echelon bike detected: ${bleDevice.platformName}');
+    developer.log('Potential Echelon device found: ${bleDevice.platformName}');
     
-    // Create and return device model immediately
-    // No connection needed - all Echelon capabilities are known
+    // Validate by connecting and checking for Echelon service UUID
+    try {
+      await bleDevice.connect(timeout: const Duration(seconds: 5));
+      final services = await bleDevice.discoverServices();
+      final hasEchelonService = services.any(
+        (s) => s.uuid.toString().toLowerCase() == echelonServiceUuid.toLowerCase(),
+      );
+      await bleDevice.disconnect();
+      await Future.delayed(const Duration(milliseconds: 500));
+      
+      if (!hasEchelonService) {
+        developer.log(
+          'Device ${bleDevice.platformName} has ECH prefix but no Echelon '
+          'service. Skipping.',
+        );
+        return null;
+      }
+    } catch (e) {
+      // On timeout, rethrow so the provider can retry on next scan
+      final errorStr = e.toString().toLowerCase();
+      if (errorStr.contains('timeout') || errorStr.contains('timed out')) {
+        try { await bleDevice.disconnect(); } catch (_) {}
+        rethrow;
+      }
+      // Other connection failures during detection — skip gracefully
+      developer.log('Could not validate Echelon device ${bleDevice.platformName}: $e');
+      try { await bleDevice.disconnect(); } catch (_) {}
+      return null;
+    }
+
+    developer.log('Echelon bike confirmed: ${bleDevice.platformName}');
+
     return model.FTMSDevice(
       id: bleDevice.remoteId.toString(),
       name: bleDevice.platformName,
@@ -102,83 +132,51 @@ class EchelonDevice implements FitnessDevice {
       }
       
 
-      // First, check if already connected
+      // Get or create BluetoothDevice from stored address (matches FTMS approach)
       final connectedDevices = FlutterBluePlus.connectedDevices;
-      BluetoothDevice? foundDevice;
-      for (var d in connectedDevices) {
-        if (d.remoteId.toString() == device.deviceAddress) {
-          foundDevice = d;
-          break;
-        }
+      _connectedDevice = connectedDevices.firstWhere(
+        (d) => d.remoteId.toString() == device.deviceAddress,
+        orElse: () => BluetoothDevice(
+          remoteId: DeviceIdentifier(device.deviceAddress!),
+        ),
+      );
+
+      // Check current connection state
+      final currentState = await _connectedDevice!.connectionState.first;
+      developer.log('Current connection state: $currentState');
+
+      // Connect if not already connected
+      if (currentState == BluetoothConnectionState.disconnected) {
+        developer.log('Connecting to device...');
+        await _connectedDevice!.connect(timeout: const Duration(seconds: 15));
+        developer.log('Connected successfully');
+      } else {
+        developer.log('Device already connected');
       }
-
-      // If not connected, we need to scan to find the device (iOS requirement)
-      if (foundDevice == null) {
-        developer.log('Device not connected, scanning to find it...');
-
-        final completer = Completer<BluetoothDevice?>();
-        late StreamSubscription subscription;
-
-        // Start scanning
-        subscription = FlutterBluePlus.scanResults.listen((results) async {
-          for (var result in results) {
-            if (result.device.remoteId.toString() == device.deviceAddress) {
-              developer.log('Found device in scan results');
-              await subscription.cancel();
-              await FlutterBluePlus.stopScan();
-              if (!completer.isCompleted) {
-                completer.complete(result.device);
-              }
-              return;
-            }
-          }
-        });
-
-        await FlutterBluePlus.startScan(
-          timeout: const Duration(seconds: 10),
-          continuousUpdates: true,
-          removeIfGone: const Duration(seconds: 15),
-        );
-
-        // Wait for device to be found or timeout
-        foundDevice = await completer.future.timeout(
-          const Duration(seconds: 10),
-          onTimeout: () => null,
-        );
-
-        // If not found, cancel subscription and stop scan after timeout
-        if (foundDevice == null) {
-          await subscription.cancel();
-          await FlutterBluePlus.stopScan();
-          throw Exception('Device not found in scan');
-        }
-      }
-
-      _connectedDevice = foundDevice;
-
-      // Now connect to the device
-      developer.log('Connecting to device...');
-      await _connectedDevice!.connect(timeout: const Duration(seconds: 30));
-      developer.log('Connected successfully');
-      // Now it's safe to stop scan
-      await FlutterBluePlus.stopScan();
 
       // Discover services
       developer.log('Discovering services...');
       final services = await _connectedDevice!.discoverServices();
       final echelonService = services.firstWhere(
         (s) => s.uuid.toString().toLowerCase() == echelonServiceUuid.toLowerCase(),
+        orElse: () => throw Exception(
+          'Echelon service not found (UUID: $echelonServiceUuid). '
+          'This device may not be a supported Echelon bike.',
+        ),
       );
       
       // Get characteristics
       _writeCharacteristic = echelonService.characteristics.firstWhere(
         (c) => c.uuid.toString().toLowerCase() == echelonWriteUuid.toLowerCase(),
+        orElse: () => throw Exception('Echelon write characteristic not found'),
       );
       _notify1Characteristic = echelonService.characteristics.firstWhere(
         (c) => c.uuid.toString().toLowerCase() == echelonNotify1Uuid.toLowerCase(),
+        orElse: () => throw Exception('Echelon notify1 characteristic not found'),
       );
       _notify2Characteristic = echelonService.characteristics.firstWhere(
         (c) => c.uuid.toString().toLowerCase() == echelonNotify2Uuid.toLowerCase(),
+        orElse: () => throw Exception('Echelon notify2 characteristic not found'),
       );
       
       // Subscribe to notifications
@@ -188,16 +186,19 @@ class EchelonDevice implements FitnessDevice {
       _notify1Subscription = _notify1Characteristic!.lastValueStream.listen(_onNotification);
       _notify2Subscription = _notify2Characteristic!.lastValueStream.listen(_onNotification);
       
-      // Monitor connection state
+      // Monitor connection state for auto-reconnection
       _connectionStateSubscription = _connectedDevice!.connectionState.listen((state) {
         final connected = state == BluetoothConnectionState.connected;
         if (_isConnected != connected) {
           _isConnected = connected;
-          _connectionStateController.add(connected);
+          if (!_connectionStateController.isClosed) {
+            _connectionStateController.add(connected);
+          }
           
-          if (!connected) {
-            developer.log('Echelon device disconnected');
+          if (!connected && !_isReconnecting) {
+            developer.log('Echelon device disconnected, attempting reconnect...');
             _stopPolling();
+            _attemptReconnect();
           }
         }
       });
@@ -240,11 +241,35 @@ class EchelonDevice implements FitnessDevice {
       }
       
       _isConnected = false;
-      _connectionStateController.add(false);
+      _isReconnecting = false;
+      if (!_connectionStateController.isClosed) {
+        _connectionStateController.add(false);
+      }
       
       developer.log('Disconnected from Echelon device');
     } catch (e) {
       developer.log('Error disconnecting from Echelon device: $e');
+    }
+  }
+
+  /// Attempts to reconnect to the Echelon device after a disconnect.
+  Future<void> _attemptReconnect() async {
+    if (_isReconnecting) return;
+    _isReconnecting = true;
+
+    // Wait before reconnecting
+    await Future.delayed(const Duration(seconds: 2));
+
+    if (!_isReconnecting) return; // Cancelled during wait
+
+    final success = await connect();
+    if (success) {
+      developer.log('Successfully reconnected to Echelon device');
+      _isReconnecting = false;
+    } else {
+      developer.log('Echelon reconnection failed, will retry...');
+      _isReconnecting = false;
+      // Will trigger again via connection state listener
     }
   }
   
@@ -454,7 +479,11 @@ class EchelonDevice implements FitnessDevice {
   
   @override
   void dispose() {
-    disconnect();
-    _connectionStateController.close();
+    _isReconnecting = false;
+    disconnect().then((_) {
+      if (!_connectionStateController.isClosed) {
+        _connectionStateController.close();
+      }
+    });
   }
 }

@@ -6,7 +6,7 @@ class AppConstants {
   static const double gradeAdjustmentFactor = 0.1;
   
   // Nominatim API Configuration
-  static const String nominatimUserAgent = 'FreeRide/1.0 (jack.xu.hong@gmail.com)';
+  static const String nominatimUserAgent = 'FreeRide/1.0 (contact@freeride.app)';
   static const String nominatimBaseUrl = 'https://nominatim.openstreetmap.org';
   static const Duration nominatimRateLimit = Duration(seconds: 1);
   
@@ -41,6 +41,14 @@ class AppConstants {
   static const double defaultPadding = 16.0;
   static const double smallPadding = 8.0;
   static const double largePadding = 24.0;
+
+  // Default values
+  static const double defaultBodyWeightKg = 70.0;
+  static const String mapUserAgentPackageName = 'com.example.free_ride';
+
+  // Virtual device limits
+  static const double maxVirtualBikeSpeedKmh = 50.0;
+  static const double maxVirtualTreadmillSpeedKmh = 20.0;
   
   // Route Difficulty Thresholds (based on elevation gain per km)
   static const double easyRouteThreshold = 10.0; // meters per km
@@ -53,4 +61,21 @@ class AppConstants {
   
   // Prevent instantiation
   AppConstants._();
+
+  /// Formats a [Duration] as a human-readable string.
+  ///
+  /// Examples: `'1h 23m'`, `'5m 12s'`, `'30s'`.
+  static String formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes.remainder(60);
+    final seconds = duration.inSeconds.remainder(60);
+
+    if (hours > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (minutes > 0) {
+      return '${minutes}m ${seconds}s';
+    } else {
+      return '${seconds}s';
+    }
+  }
 }

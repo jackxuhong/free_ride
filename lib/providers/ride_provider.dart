@@ -63,7 +63,7 @@ class RideProvider with ChangeNotifier {
   // Real-time calories tracking
   double _currentCalories = 0.0;
   double _totalElevationGained = 0.0;
-  double _cachedBodyWeight = 70.0; // Cached from profile, default 70kg
+  double _cachedBodyWeight = AppConstants.defaultBodyWeightKg;
 
   // Summary caching
   RideSummary? _lastSummary;
@@ -101,7 +101,7 @@ class RideProvider with ChangeNotifier {
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
-    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
+    _cachedBodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -110,8 +110,10 @@ class RideProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Initialize ride with a device (new method for device integration)
-  void startRideWithDevice(
+  /// Initializes ride with a device and connects.
+  ///
+  /// Returns `true` if the device connected successfully, `false` otherwise.
+  Future<bool> startRideWithDevice(
     SavedRoute route,
     FitnessDevice device, {
     Uint8List? thumbnail,
@@ -123,14 +125,22 @@ class RideProvider with ChangeNotifier {
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
-    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
+    _cachedBodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
     
     // Set device and intensity AFTER reset
     _activeDevice = device;
     _workoutIntensity = 1.0;
     
     // Connect to device (real or virtual)
-    await device.connect();
+    final connected = await device.connect();
+    if (!connected) {
+      developer.log(
+        'Failed to connect to device: ${device.deviceType}',
+        name: 'RideProvider',
+        level: 1000,
+      );
+      return false;
+    }
     // Listen to connection state for auto-pause/resume
     device.connectionState.listen((isConnected) {
       if (!isConnected && _status == RideStatus.running) {
@@ -148,6 +158,7 @@ class RideProvider with ChangeNotifier {
     startRide();
     
     notifyListeners();
+    return true;
   }
 
   /// Set workout intensity multiplier (0.5 to 2.0)
@@ -442,7 +453,9 @@ class RideProvider with ChangeNotifier {
     final segmentDistances = _route!.geometry.segmentDistances;
 
     if (_currentSegmentIndex >= segmentDistances.length) {
-      // Reached the end
+      // Reached the end — cancel timer first to prevent re-entry
+      _simulationTimer?.cancel();
+      _simulationTimer = null;
       completeRide();
       return;
     }
@@ -459,8 +472,10 @@ class RideProvider with ChangeNotifier {
       _currentSegmentIndex++;
       
       if (_currentSegmentIndex >= waypoints.length - 1) {
-        // Reached destination - only complete if not already completed
+        // Reached destination — cancel timer first to prevent re-entry
         if (_status == RideStatus.running) {
+          _simulationTimer?.cancel();
+          _simulationTimer = null;
           _currentPosition = _route!.coordinates.end;
           _currentElevation = _route!.elevationProfile.elevations.last;
           completeRide();
@@ -545,7 +560,7 @@ class RideProvider with ChangeNotifier {
 
     // Get user's body weight from profile
     final profile = await ProfileService().getProfile();
-    final bodyWeight = profile?.bodyWeight ?? 70.0;
+    final bodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
 
     final calories = RideCalculator.estimateCalories(
       distanceMeters: _completedDistance,
@@ -589,7 +604,7 @@ class RideProvider with ChangeNotifier {
     );
   }
 
-  /// Reset all metrics
+  /// Resets all metrics and disconnects any active device.
   void _resetMetrics() {
     _currentSegmentIndex = 0;
     _progressInSegment = 0.0;
@@ -616,6 +631,7 @@ class RideProvider with ChangeNotifier {
     _cadenceSamples = [];
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
+    _activeDevice?.disconnect();
     _activeDevice = null;
     _currentCalories = 0.0;
     _totalElevationGained = 0.0;

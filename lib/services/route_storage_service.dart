@@ -20,14 +20,28 @@ class RouteStorageService {
 
     await Hive.initFlutter();
 
-    // Register adapters
-    Hive.registerAdapter(DurationAdapter());
-    Hive.registerAdapter(SavedRouteAdapter());
-    Hive.registerAdapter(RouteCoordinatesAdapter());
-    Hive.registerAdapter(LatLngPointAdapter());
-    Hive.registerAdapter(RouteGeometryAdapter());
-    Hive.registerAdapter(ElevationProfileAdapter());
-    Hive.registerAdapter(RideSummaryAdapter());
+    // Register adapters (with guard to prevent duplicates)
+    if (!Hive.isAdapterRegistered(100)) {
+      Hive.registerAdapter(DurationAdapter());
+    }
+    if (!Hive.isAdapterRegistered(0)) {
+      Hive.registerAdapter(SavedRouteAdapter());
+    }
+    if (!Hive.isAdapterRegistered(1)) {
+      Hive.registerAdapter(RouteCoordinatesAdapter());
+    }
+    if (!Hive.isAdapterRegistered(2)) {
+      Hive.registerAdapter(LatLngPointAdapter());
+    }
+    if (!Hive.isAdapterRegistered(3)) {
+      Hive.registerAdapter(RouteGeometryAdapter());
+    }
+    if (!Hive.isAdapterRegistered(4)) {
+      Hive.registerAdapter(ElevationProfileAdapter());
+    }
+    if (!Hive.isAdapterRegistered(6)) {
+      Hive.registerAdapter(RideSummaryAdapter());
+    }
 
     // Open boxes
     _routesBox = await Hive.openBox<SavedRoute>(AppConstants.routesBoxName);

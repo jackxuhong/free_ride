@@ -8,7 +8,7 @@ import 'package:free_ride/services/device_storage_service.dart';
 
 import 'package:free_ride/services/virtual_indoor_bike.dart';
 import 'package:free_ride/services/virtual_treadmill.dart';
-import 'package:free_ride/services/ftms_device.dart' as ftms;
+import 'package:free_ride/services/ftms_device_service.dart' as ftms;
 import 'package:free_ride/services/echelon_device.dart';
 import 'package:free_ride/services/fitness_device.dart';
 
@@ -239,13 +239,11 @@ class DeviceProvider extends ChangeNotifier {
       developer.log('Processing ${scannedDevices.length} discovered devices...', name: 'DeviceProvider');
       for (var bleDevice in scannedDevices) {
         final deviceName = bleDevice.remoteId.toString() + (bleDevice.platformName.isNotEmpty ? ' (${bleDevice.platformName})' : '');        
-        /*
         // Skip devices with no name (often not fitness equipment)
         if (bleDevice.platformName.isEmpty) {
           developer.log('Skipping unnamed device: ${bleDevice.remoteId}', name: 'DeviceProvider');
           continue;
         }
-        */
 
         // Skip if already discovered/tested in cache
         final cacheKey = bleDevice.remoteId.toString();

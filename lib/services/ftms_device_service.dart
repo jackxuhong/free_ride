@@ -72,6 +72,11 @@ class FTMSDevice implements FitnessDevice {
   /// Detect if a BLE device is a supported FTMS device
   /// Returns FTMSDevice if supported, null otherwise
   static Future<model.FTMSDevice?> detectDevice(BluetoothDevice bleDevice) async {
+    // Skip unnamed devices — they are never FTMS fitness equipment
+    if (bleDevice.platformName.isEmpty) {
+      return null;
+    }
+
     try {
       // Connect to device with timeout
       await bleDevice.connect(timeout: const Duration(seconds: 5));
@@ -416,7 +421,10 @@ class FTMSDevice implements FitnessDevice {
     return Uint8List(0);
   }
 
-  /// Parse Indoor Bike Data (UUID 0x2AD2)
+  /// Parses Indoor Bike Data characteristic (UUID 0x2AD2) per FTMS spec.
+  ///
+  /// Fields are consumed in bit-flag order so that unrecognised but flagged
+  /// fields are properly skipped and downstream offsets remain correct.
   DeviceDataSnapshot _parseIndoorBikeData(List<int> data) {
     if (data.length < 4) return DeviceDataSnapshot();
 
@@ -429,36 +437,61 @@ class FTMSDevice implements FitnessDevice {
     int? heartRate;
     double? resistance;
 
-    // Speed (bit 0 always present for instantaneous speed)
+    // Instantaneous Speed — always present (uint16, 0.01 km/h)
     if (offset + 2 <= data.length) {
       final speedRaw = data[offset] | (data[offset + 1] << 8);
-      speed = speedRaw * 0.01; // Resolution: 0.01 km/h
+      speed = speedRaw * 0.01;
       offset += 2;
     }
 
-    // Cadence (bit 2)
+    // Bit 1 — Average Speed (uint16, 0.01 km/h)
+    if ((flags & 0x02) != 0) {
+      offset += 2; // skip
+    }
+
+    // Bit 2 — Instantaneous Cadence (uint16, 0.5 RPM)
     if ((flags & 0x04) != 0 && offset + 2 <= data.length) {
       final cadenceRaw = data[offset] | (data[offset + 1] << 8);
-      cadence = cadenceRaw * 0.5; // Resolution: 0.5 RPM
+      cadence = cadenceRaw * 0.5;
       offset += 2;
     }
 
-    // Power (bit 6)
-    if ((flags & 0x40) != 0 && offset + 2 <= data.length) {
-      final powerRaw = data[offset] | (data[offset + 1] << 8);
-      power = powerRaw.toDouble(); // Resolution: 1 W
-      offset += 2;
+    // Bit 3 — Average Cadence (uint16)
+    if ((flags & 0x08) != 0) {
+      offset += 2; // skip
     }
 
-    // Resistance (bit 5)
+    // Bit 4 — Total Distance (uint24)
+    if ((flags & 0x10) != 0) {
+      offset += 3; // skip
+    }
+
+    // Bit 5 — Resistance Level (sint16)
     if ((flags & 0x20) != 0 && offset + 2 <= data.length) {
       final resistanceRaw = data[offset] | (data[offset + 1] << 8);
       resistance = resistanceRaw.toDouble();
       offset += 2;
     }
 
-    // Heart Rate (bit 9)
-    if ((flags & 0x100) != 0 && offset + 1 <= data.length) {
+    // Bit 6 — Instantaneous Power (sint16, 1 W)
+    if ((flags & 0x40) != 0 && offset + 2 <= data.length) {
+      final powerRaw = data[offset] | (data[offset + 1] << 8);
+      power = powerRaw.toDouble();
+      offset += 2;
+    }
+
+    // Bit 7 — Average Power (sint16)
+    if ((flags & 0x80) != 0) {
+      offset += 2; // skip
+    }
+
+    // Bit 8 — Expended Energy (uint16 total + uint16 per hour + uint8 per min)
+    if ((flags & 0x100) != 0) {
+      offset += 5; // skip
+    }
+
+    // Bit 9 — Heart Rate (uint8)
+    if ((flags & 0x200) != 0 && offset + 1 <= data.length) {
       heartRate = data[offset];
       offset += 1;
     }
@@ -472,7 +505,9 @@ class FTMSDevice implements FitnessDevice {
     );
   }
 
-  /// Parse Treadmill Data (UUID 0x2ACD)
+  /// Parses Treadmill Data characteristic (UUID 0x2ACD) per FTMS spec.
+  ///
+  /// Consumes fields in bit-flag order to keep offsets correct.
   DeviceDataSnapshot _parseTreadmillData(List<int> data) {
     if (data.length < 4) return DeviceDataSnapshot();
 
@@ -484,28 +519,62 @@ class FTMSDevice implements FitnessDevice {
     double? incline;
     int? heartRate;
 
-    // Speed (bit 0 always present)
+    // Instantaneous Speed — always present (uint16, 0.01 km/h)
     if (offset + 2 <= data.length) {
       final speedRaw = data[offset] | (data[offset + 1] << 8);
-      speed = speedRaw * 0.01; // Resolution: 0.01 km/h
+      speed = speedRaw * 0.01;
       offset += 2;
     }
 
-    // Pace (bit 5)
+    // Bit 1 — Average Speed (uint16)
+    if ((flags & 0x02) != 0) {
+      offset += 2;
+    }
+
+    // Bit 2 — Total Distance (uint24)
+    if ((flags & 0x04) != 0) {
+      offset += 3;
+    }
+
+    // Bit 3 — Inclination + Ramp Angle (sint16 + sint16)
+    if ((flags & 0x08) != 0 && offset + 4 <= data.length) {
+      final inclineRaw = ByteData.sublistView(
+        Uint8List.fromList(data.sublist(offset, offset + 2)),
+      ).getInt16(0, Endian.little);
+      incline = inclineRaw * 0.1; // 0.1% resolution
+      offset += 4; // inclination (2) + ramp angle (2)
+    }
+
+    // Bit 4 — Positive Elevation Gain (uint16)
+    if ((flags & 0x10) != 0) {
+      offset += 2;
+    }
+
+    // Bit 5 — Negative Elevation Gain (uint16)  — also carries pace in some profiles
     if ((flags & 0x20) != 0 && offset + 1 <= data.length) {
-      pace = data[offset].toDouble(); // min/km
+      // Some implementations put pace here; capture it opportunistically
+      pace = data[offset].toDouble();
+      offset += 2;
+    }
+
+    // Bit 6 — Instantaneous Pace (uint8, 1 s/km)
+    if ((flags & 0x40) != 0 && offset + 1 <= data.length) {
+      pace = data[offset].toDouble();
       offset += 1;
     }
 
-    // Incline (bit 3)
-    if ((flags & 0x08) != 0 && offset + 2 <= data.length) {
-      final inclineRaw = data[offset] | (data[offset + 1] << 8);
-      incline = inclineRaw * 0.1; // Resolution: 0.1%
-      offset += 2;
+    // Bit 7 — Average Pace (uint8)
+    if ((flags & 0x80) != 0) {
+      offset += 1;
     }
 
-    // Heart Rate (bit 8)
-    if ((flags & 0x100) != 0 && offset + 1 <= data.length) {
+    // Bit 8 — Expended Energy (uint16 + uint16 + uint8 = 5 bytes)
+    if ((flags & 0x100) != 0) {
+      offset += 5;
+    }
+
+    // Bit 9 — Heart Rate (uint8)
+    if ((flags & 0x200) != 0 && offset + 1 <= data.length) {
       heartRate = data[offset];
       offset += 1;
     }

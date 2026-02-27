@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/models/ftms_device.dart' as model;
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_device.dart' as ftms_service;
+import 'package:free_ride/services/ftms_device_service.dart' as ftms_service;
 import 'package:free_ride/widgets/virtual_device_controller.dart';
 
 class DeviceSetupScreen extends StatefulWidget {

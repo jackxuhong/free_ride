@@ -174,7 +174,7 @@ class _InputScreenState extends State<InputScreen> {
   Future<double> _calculateEstimatedCalories(double distanceKm, double elevationGainM) async {
     // Get user's body weight from profile
     final profile = await _profileService.getProfile();
-    final bodyWeightKg = profile?.bodyWeight ?? 70.0; // Default to 70kg if no profile
+    final bodyWeightKg = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
     
     // Calorie calculation for cycling:
     // - Flat terrain: ~0.5 kcal per kg per km
@@ -948,7 +948,7 @@ class _InputScreenState extends State<InputScreen> {
                           children: [
                             TileLayer(
                               urlTemplate: AppConstants.osmTileUrl,
-                              userAgentPackageName: 'com.example.free_ride',
+                              userAgentPackageName: AppConstants.mapUserAgentPackageName,
                             ),
                             PolylineLayer(
                               polylines: [
