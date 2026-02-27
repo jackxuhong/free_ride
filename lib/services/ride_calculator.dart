@@ -74,7 +74,7 @@ class RideCalculator {
     required double distanceMeters,
     required double elevationGainMeters,
     required Duration duration,
-    double riderWeightKg = 70.0,
+    double riderWeightKg = 70.0, // matches AppConstants.defaultBodyWeightKg
   }) {
     final avgSpeed = calculateAverageSpeed(distanceMeters, duration);
 
@@ -102,7 +102,7 @@ class RideCalculator {
   static double estimatePower({
     required double speedKmh,
     required double grade,
-    double riderWeightKg = 70.0,
+    double riderWeightKg = 70.0, // matches AppConstants.defaultBodyWeightKg
     double bikeWeightKg = 10.0,
   }) {
     final totalWeight = riderWeightKg + bikeWeightKg;

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:free_ride/models/ftms_device.dart';
 import 'package:free_ride/providers/device_provider.dart';
+import 'package:free_ride/utils/constants.dart';
 
 class VirtualDeviceController extends StatefulWidget {
   final FTMSDevice device;
@@ -58,8 +59,10 @@ class _VirtualDeviceControllerState extends State<VirtualDeviceController> {
             Slider(
               value: _speed,
               min: 0,
-              max: 200,
-              divisions: 2000,
+              max: isBike
+                  ? AppConstants.maxVirtualBikeSpeedKmh
+                  : AppConstants.maxVirtualTreadmillSpeedKmh,
+              divisions: isBike ? 500 : 200,
               label: '${_speed.toStringAsFixed(1)} km/h',
               onChanged: (value) {
                 setState(() => _speed = value);

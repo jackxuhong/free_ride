@@ -156,7 +156,20 @@ class ElevationProfile {
   }
   
   double get totalDistance {
-    // This should be passed from RouteGeometry, but for now calculate from segments
-    return 0.0;
+    if (grades.isEmpty || elevations.length < 2) return 0.0;
+    // Approximate total distance from elevation differences and grades.
+    // grade = rise / run  =>  run = rise / grade (when grade != 0).
+    // For zero-grade segments we fall back to a rough per-point spacing.
+    double total = 0.0;
+    for (int i = 0; i < grades.length; i++) {
+      final rise = (elevations[i + 1] - elevations[i]).abs();
+      if (grades[i].abs() > 0.001) {
+        total += rise / grades[i].abs();
+      } else {
+        // Flat segment — estimate from neighbouring segments
+        total += 10.0; // 10 m default spacing
+      }
+    }
+    return total;
   }
 }

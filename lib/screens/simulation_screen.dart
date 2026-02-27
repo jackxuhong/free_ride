@@ -5,7 +5,6 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:free_ride/providers/route_provider.dart';
 import 'package:free_ride/providers/ride_provider.dart';
 import 'package:free_ride/providers/device_provider.dart';
-import 'package:free_ride/services/ftms_service.dart';
 import 'package:free_ride/screens/summary_screen.dart';
 import 'package:free_ride/utils/constants.dart';
 import 'package:free_ride/widgets/elevation_chart.dart';
@@ -230,15 +229,14 @@ class _SimulationScreenState extends State<SimulationScreen> {
       ),
       body: Column(
         children: [
-          // Connection status banner for FTMS devices
-          if (rideProvider.activeDevice is FTMSService)
+          // Connection status banner for real (non-virtual) devices
+          if (rideProvider.activeDevice != null)
             StreamBuilder<bool>(
-              stream: (rideProvider.activeDevice as FTMSService).connectionState,
-              initialData: (rideProvider.activeDevice as FTMSService).isConnected,
+              stream: rideProvider.activeDevice!.connectionState,
+              initialData: rideProvider.activeDevice!.isConnected,
               builder: (context, snapshot) {
                 final isConnected = snapshot.data ?? false;
                 if (isConnected) return const SizedBox.shrink();
-                
                 return Container(
                   width: double.infinity,
                   padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
@@ -305,7 +303,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
                   children: [
                     TileLayer(
                       urlTemplate: AppConstants.osmTileUrl,
-                      userAgentPackageName: 'com.example.free_ride',
+                      userAgentPackageName: AppConstants.mapUserAgentPackageName,
                     ),
                     PolylineLayer(
                       polylines: [
@@ -533,17 +531,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
   }
 
   String _formatDuration(Duration duration) {
-    final hours = duration.inHours;
-    final minutes = duration.inMinutes.remainder(60);
-    final seconds = duration.inSeconds.remainder(60);
-
-    if (hours > 0) {
-      return '${hours}h ${minutes}m';
-    } else if (minutes > 0) {
-      return '${minutes}m ${seconds}s';
-    } else {
-      return '${seconds}s';
-    }
+    return AppConstants.formatDuration(duration);
   }
 }
 

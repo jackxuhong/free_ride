@@ -10,7 +10,7 @@ import 'package:free_ride/services/ride_calculator.dart';
 import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
-import 'package:free_ride/services/ftms_service.dart';
+import 'package:free_ride/services/fitness_device.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -53,18 +53,17 @@ class RideProvider with ChangeNotifier {
   List<PowerSample> _powerSamples = [];
 
   // Device tracking
-  VirtualFitnessDevice? _activeDevice;
+  FitnessDevice? _activeDevice;
   double _currentCadence = 0.0;
   double _currentHeartRate = 0.0;
   List<double> _cadenceSamples = [];
   List<double> _heartRateSamples = [];
   double _workoutIntensity = 1.0;
-  StreamSubscription? _deviceConnectionSubscription;
   
   // Real-time calories tracking
   double _currentCalories = 0.0;
   double _totalElevationGained = 0.0;
-  double _cachedBodyWeight = 70.0; // Cached from profile, default 70kg
+  double _cachedBodyWeight = AppConstants.defaultBodyWeightKg;
 
   // Summary caching
   RideSummary? _lastSummary;
@@ -90,19 +89,19 @@ class RideProvider with ChangeNotifier {
   double get currentCadence => _currentCadence;
   double get currentHeartRate => _currentHeartRate;
   double get workoutIntensity => _workoutIntensity;
-  VirtualFitnessDevice? get activeDevice => _activeDevice;
+  FitnessDevice? get activeDevice => _activeDevice;
   double get currentCalories => _currentCalories;
 
   /// Initialize ride with a route
-  void initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
+  Future<void> initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
-    _resetMetrics();
+    await _resetMetrics();
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
-    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
+    _cachedBodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -111,44 +110,45 @@ class RideProvider with ChangeNotifier {
     notifyListeners();
   }
 
-  /// Initialize ride with a device (new method for device integration)
-  void startRideWithDevice(
+  /// Initializes ride with a device and connects.
+  ///
+  /// Returns `true` if the device connected successfully, `false` otherwise.
+  Future<bool> startRideWithDevice(
     SavedRoute route,
-    VirtualFitnessDevice device, {
+    FitnessDevice device, {
     Uint8List? thumbnail,
   }) async {
     _route = route;
     _status = RideStatus.notStarted;
     _routeThumbnail = thumbnail;
-    _resetMetrics();
+    await _resetMetrics();
     
     // Load user profile weight for calorie calculations
     final profile = await ProfileService().getProfile();
-    _cachedBodyWeight = profile?.bodyWeight ?? 70.0;
+    _cachedBodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
     
     // Set device and intensity AFTER reset
     _activeDevice = device;
     _workoutIntensity = 1.0;
     
-    // Connect to device if it's a real FTMS device
-    if (device is FTMSService) {
-      final connected = await device.connect();
-      // Don't show error - auto-reconnect will handle connection issues
-      // if (!connected) {
-      //   print('Failed to connect to FTMS device');
-      // }
-      
-      // Listen to connection state for auto-pause/resume
-      _deviceConnectionSubscription = device.connectionState.listen((isConnected) {
-        if (!isConnected && _status == RideStatus.running) {
-          // Auto-pause when device disconnects during ride
-          pauseRide();
-        } else if (isConnected && _status == RideStatus.paused) {
-          // Auto-resume when device reconnects (only if paused by disconnect)
-          resumeRide();
-        }
-      });
+    // Connect to device (real or virtual)
+    final connected = await device.connect();
+    if (!connected) {
+      developer.log(
+        'Failed to connect to device: ${device.deviceType}',
+        name: 'RideProvider',
+        level: 1000,
+      );
+      return false;
     }
+    // Listen to connection state for auto-pause/resume
+    device.connectionState.listen((isConnected) {
+      if (!isConnected && _status == RideStatus.running) {
+        pauseRide();
+      } else if (isConnected && _status == RideStatus.paused) {
+        resumeRide();
+      }
+    });
     
     // Set initial position
     _currentPosition = route.coordinates.start;
@@ -158,6 +158,7 @@ class RideProvider with ChangeNotifier {
     startRide();
     
     notifyListeners();
+    return true;
   }
 
   /// Set workout intensity multiplier (0.5 to 2.0)
@@ -211,7 +212,7 @@ class RideProvider with ChangeNotifier {
   Future<RideSummary> cancelRide() async {
     // If ride hasn't started, just reset without changing status to cancelled
     if (_startTime == null) {
-      _resetMetrics();
+      await _resetMetrics();
       notifyListeners();
       throw Exception('Cannot cancel a ride that has not started');
     }
@@ -220,17 +221,15 @@ class RideProvider with ChangeNotifier {
     _endTime = DateTime.now();
     _simulationTimer?.cancel();
     
-    // Disconnect device if it's a real FTMS device
-    if (_activeDevice is FTMSService) {
-      await (_activeDevice as FTMSService).disconnect();
-    }
+    // Disconnect device (real or virtual)
+    await _activeDevice?.disconnect();
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
     // Auto-save cancelled ride to history
     _autoSaveRide(summary);
     
-    _resetMetrics();
+    await _resetMetrics();
     
     notifyListeners();
     return summary;
@@ -319,8 +318,9 @@ class RideProvider with ChangeNotifier {
     }
     
     _lastSummary = summary;
-    // Don't reset metrics here - let the next ride initialization do it
-    // This keeps startTime available for UI navigation check
+
+    // Disconnect device so the next ride can reconnect cleanly
+    await _activeDevice?.disconnect();
     
     // Auto-save completed ride to history
     await _autoSaveRide(summary);
@@ -377,28 +377,19 @@ class RideProvider with ChangeNotifier {
       }
 
       // Send control commands to device based on route grade and intensity
-      final isBike = _activeDevice is FTMSService 
-          ? (_activeDevice as FTMSService).deviceType == DeviceType.indoorBike
-          : _activeDevice.runtimeType.toString().contains('Bike');
-      
+      final isBike = _activeDevice?.deviceType == DeviceType.indoorBike;
       if (isBike) {
-        // Map grade percentage to resistance and apply intensity multiplier
-        // Grade is stored as decimal (0.05 = 5%), convert to percentage first
         final gradePercent = _currentGrade * 100;
-        // Get device resistance range (default 1-20 if not FTMS)
-        final minRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).minResistance.toDouble() : 1.0;
-        final maxRes = _activeDevice is FTMSService ? (_activeDevice as FTMSService).maxResistance.toDouble() : 20.0;
-        // Map -5% to 15% grade range to device resistance range
-        // 0% = 25% of range, scaling factor based on range
+        final minRes = _activeDevice?.minResistance.toDouble() ?? 1.0;
+        final maxRes = _activeDevice?.maxResistance.toDouble() ?? 20.0;
         final rangeSize = maxRes - minRes;
         final baseResistance = (gradePercent * (rangeSize / 20.0) + minRes + (rangeSize * 0.25)).clamp(minRes, maxRes);
         final adjustedResistance = (baseResistance * _workoutIntensity).clamp(minRes, maxRes).round();
-        _activeDevice!.sendControlCommand(SetResistance(adjustedResistance));
+        _activeDevice?.sendControlCommand(SetResistance(adjustedResistance));
       } else {
-        // Map grade to incline percentage and apply intensity multiplier
         final baseIncline = (_currentGrade * 100).clamp(-3.0, 15.0);
         final adjustedIncline = (baseIncline * _workoutIntensity).clamp(-3.0, 15.0);
-        _activeDevice!.sendControlCommand(SetIncline(adjustedIncline));
+        _activeDevice?.sendControlCommand(SetIncline(adjustedIncline));
       }
 
       // Use device power if available
@@ -463,7 +454,9 @@ class RideProvider with ChangeNotifier {
     final segmentDistances = _route!.geometry.segmentDistances;
 
     if (_currentSegmentIndex >= segmentDistances.length) {
-      // Reached the end
+      // Reached the end — cancel timer first to prevent re-entry
+      _simulationTimer?.cancel();
+      _simulationTimer = null;
       completeRide();
       return;
     }
@@ -480,8 +473,10 @@ class RideProvider with ChangeNotifier {
       _currentSegmentIndex++;
       
       if (_currentSegmentIndex >= waypoints.length - 1) {
-        // Reached destination - only complete if not already completed
+        // Reached destination — cancel timer first to prevent re-entry
         if (_status == RideStatus.running) {
+          _simulationTimer?.cancel();
+          _simulationTimer = null;
           _currentPosition = _route!.coordinates.end;
           _currentElevation = _route!.elevationProfile.elevations.last;
           completeRide();
@@ -566,7 +561,7 @@ class RideProvider with ChangeNotifier {
 
     // Get user's body weight from profile
     final profile = await ProfileService().getProfile();
-    final bodyWeight = profile?.bodyWeight ?? 70.0;
+    final bodyWeight = profile?.bodyWeight ?? AppConstants.defaultBodyWeightKg;
 
     final calories = RideCalculator.estimateCalories(
       distanceMeters: _completedDistance,
@@ -610,8 +605,8 @@ class RideProvider with ChangeNotifier {
     );
   }
 
-  /// Reset all metrics
-  void _resetMetrics() {
+  /// Resets all metrics and disconnects any active device.
+  Future<void> _resetMetrics() async {
     _currentSegmentIndex = 0;
     _progressInSegment = 0.0;
     _currentPosition = null;
@@ -637,6 +632,7 @@ class RideProvider with ChangeNotifier {
     _cadenceSamples = [];
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
+    await _activeDevice?.disconnect();
     _activeDevice = null;
     _currentCalories = 0.0;
     _totalElevationGained = 0.0;
