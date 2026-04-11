@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:free_ride/models/user_profile.dart';
 import 'package:free_ride/services/profile_service.dart';
+import 'package:free_ride/utils/build_version.dart';
 
 class ProfileScreen extends StatefulWidget {
   final VoidCallback? onProfileSaved;
@@ -174,6 +175,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 label: const Text('Save Profile'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.all(16),
+                ),
+              ),
+              const SizedBox(height: 48),
+              Text(
+                BuildVersion.version,
+                textAlign: TextAlign.center,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.outline,
                 ),
               ),
             ],
