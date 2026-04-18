@@ -3,3 +3,5 @@
 //   - ride_calculator_test.dart
 //   - echelon_power_table_test.dart
 //   - ftms_parser_test.dart
+
+void main() {}
