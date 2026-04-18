@@ -41,13 +41,11 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
                   ],
                 ),
               );
-              if (confirmed == true) {
+              if (confirmed == true && context.mounted) {
                 context.read<DeviceProvider>().clearDeviceCache();
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Device cache cleared.')),
-                  );
-                }
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Device cache cleared.')),
+                );
               }
             },
           ),
@@ -116,7 +114,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _startScan(context),
+        onPressed: () => _startScan(),
         icon: const Icon(Icons.bluetooth_searching),
         label: const Text('Scan for Devices'),
       ),
@@ -188,7 +186,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
             ),
             onTap: () async {
               await deviceProvider.selectDevice(device);
-              if (mounted) {
+              if (context.mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text('Selected ${device.name}'),
@@ -294,7 +292,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
           } else {
             await deviceProvider.selectHRMonitor(device);
           }
-          if (mounted) {
+          if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(isSelected ? 'Deselected ${device.name}' : 'Selected ${device.name}'),
@@ -307,7 +305,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     );
   }
 
-  void _startScan(BuildContext context) async {
+  void _startScan() async {
     final deviceProvider = context.read<DeviceProvider>();
 
     // Track if user cancelled
@@ -330,7 +328,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
       builder: (dialogContext) {
         // When scan completes, pop the dialog if still open
         dialogCompleter.future.then((_) {
-          if (Navigator.of(dialogContext, rootNavigator: true).canPop()) {
+          if (dialogContext.mounted && Navigator.of(dialogContext, rootNavigator: true).canPop()) {
             Navigator.of(dialogContext, rootNavigator: true).pop();
           }
         });
@@ -361,7 +359,7 @@ class _DeviceSetupScreenState extends State<DeviceSetupScreen> {
     // Wait for scan to finish if not cancelled
     if (!cancelled) {
       await scanFuture;
-      if (context.mounted) {
+      if (mounted) {
         final deviceCount = deviceProvider.availableDevices.where((d) => !d.isVirtual).length;
         if (deviceCount == 0) {
           _showNoDevicesFound(context);

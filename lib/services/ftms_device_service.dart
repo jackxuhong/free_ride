@@ -32,17 +32,23 @@ class FTMSDevice implements FitnessDevice {
   DeviceDataSnapshot? _lastSnapshot;
   
   /// Stream of connection state (true = connected, false = disconnected)
+  @override
   Stream<bool> get connectionState => _connectionStateController.stream;
   
   /// Current connection state
+  @override
   bool get isConnected => _isConnected;
   
   /// Device resistance range
+  @override
   int get minResistance => _minResistance;
+  @override
   int get maxResistance => _maxResistance;
   
   /// Device incline range
+  @override
   double get minIncline => _minIncline;
+  @override
   double get maxIncline => _maxIncline;
 
   // FTMS UUIDs
@@ -146,6 +152,7 @@ class FTMSDevice implements FitnessDevice {
   model.DeviceType get deviceType => _deviceType;
 
   /// Connect to the device
+  @override
   Future<bool> connect() async {
     try {
       if (device.deviceAddress == null) {
@@ -315,6 +322,7 @@ class FTMSDevice implements FitnessDevice {
   ///
   /// When [preserveReconnectState] is `true` the reconnect flag is left
   /// untouched so that a retry loop in [_attemptReconnect] can continue.
+  @override
   Future<void> disconnect({bool preserveReconnectState = false}) async {
     if (!preserveReconnectState) {
       _isReconnecting = false; // Stop any reconnection attempts

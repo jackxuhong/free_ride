@@ -432,7 +432,7 @@ class _InputScreenState extends State<InputScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         DropdownButtonFormField<String>(
-                          value: _selectedRouteId,
+                          initialValue: _selectedRouteId,
                           decoration: const InputDecoration(
                             labelText: 'Create a new route or load a saved one',
                             prefixIcon: Icon(Icons.bookmark),
@@ -521,7 +521,7 @@ class _InputScreenState extends State<InputScreen> {
                     label = 'End Location';
                     icon = Icons.flag;
                   } else {
-                    label = 'Stop ${index}';
+                    label = 'Stop $index';
                     icon = Icons.place;
                   }
                   
@@ -652,7 +652,7 @@ class _InputScreenState extends State<InputScreen> {
                       ],
                     ],
                   );
-                }).toList(),
+                }),
                           const SizedBox(height: 24),
                           
                           // Button row: Get Route, Save, Delete

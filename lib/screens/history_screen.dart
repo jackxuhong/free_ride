@@ -181,6 +181,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         rideProvider.initializeRide(route);
       }
       
+      if (!mounted) return;
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => const SimulationScreen(),

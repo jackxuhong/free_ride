@@ -190,7 +190,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted) {
           final summary = await rideProvider.completeRide();
-          if (mounted) {
+          if (context.mounted) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => SummaryScreen(summary: summary),

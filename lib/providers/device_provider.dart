@@ -92,9 +92,7 @@ class DeviceProvider extends ChangeNotifier {
     await _storage.setLastUsedDeviceId(device.id);
 
     // Only create new active device if we don't have one or device changed
-    if (_activeDevice == null) {
-      _activeDevice = _createActiveDevice(device);
-    }
+    _activeDevice ??= _createActiveDevice(device);
 
     notifyListeners();
   }
