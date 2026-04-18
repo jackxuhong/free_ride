@@ -12,6 +12,7 @@ graph TD
         VT[VirtualTreadmill]
         FTMS[FTMSDeviceService]
         ECH[EchelonDevice]
+        HRMS[HeartRateMonitorService]
         VDI[ControlCommand]
     end
 
@@ -181,6 +182,36 @@ flowchart LR
 | 3 | 70–80% | Tempo |
 | 4 | 80–90% | Threshold |
 | 5 | 90%+ | VO2 Max |
+
+---
+
+## HeartRateMonitorService
+
+**File:** `lib/services/heart_rate_monitor_service.dart`
+
+Standalone BLE heart rate monitor connection and data streaming. Uses the standard GATT Heart Rate Service (0x180D) rather than the `FitnessDevice` interface — HR monitors don't have speed, power, or control commands.
+
+### Key Methods
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `detectDevice(bleDevice)` | `FTMSDevice?` | Static — connects, checks for 0x180D + 0x2A37, returns device model |
+| `connect()` | `Future<bool>` | Connects, discovers services, subscribes to HR notifications |
+| `disconnect()` | `Future<void>` | Clean disconnect, resets state |
+| `parseHeartRate(data)` | `int` | Static — parses GATT HR Measurement: flags byte determines UINT8 vs UINT16 format |
+
+### Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `isConnected` | `bool` | Current connection status |
+| `currentHeartRate` | `int` | Latest HR value (0 when disconnected) |
+| `connectionState` | `Stream<bool>` | Connection state changes |
+| `heartRateStream` | `Stream<int>` | Parsed HR values as they arrive |
+
+### Auto-Reconnect
+
+On unexpected disconnect, the service waits 2 seconds then retries `connect()`. The `_isReconnecting` flag prevents recursive reconnect loops.
 
 ---
 

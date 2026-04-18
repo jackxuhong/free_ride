@@ -1,6 +1,6 @@
 # Bluetooth Integration
 
-Free Ride supports three categories of fitness devices: virtual simulators, standard FTMS (Fitness Machine Service) devices, and Echelon proprietary bikes.
+Free Ride supports three categories of fitness devices (virtual simulators, standard FTMS devices, and Echelon proprietary bikes) plus standalone BLE heart rate monitors.
 
 ## Device Hierarchy
 
@@ -50,10 +50,25 @@ classDiagram
         +detectDevice(device)$ Future~FTMSDevice?~
     }
 
+    class HeartRateMonitorService {
+        -BluetoothDevice connectedDevice
+        -int currentHeartRate
+        +connect() Future~bool~
+        +disconnect() Future~void~
+        +parseHeartRate(data)$ int
+        +detectDevice(device)$ Future~FTMSDevice?~
+        +isConnected bool
+        +heartRateStream Stream~int~
+        +connectionState Stream~bool~
+    }
+
     FitnessDevice <|-- VirtualIndoorBike
     FitnessDevice <|-- VirtualTreadmill
     FitnessDevice <|-- FTMSDeviceService
     FitnessDevice <|-- EchelonDevice
+```
+
+> **Note:** `HeartRateMonitorService` is intentionally **not** a `FitnessDevice`. It is a lightweight, independent service — HR monitors don't have speed, power, resistance, or control commands.
 ```
 
 ## Device Detection Flow
@@ -64,6 +79,7 @@ sequenceDiagram
     participant FBP as FlutterBluePlus
     participant ECH as EchelonDevice
     participant FTMS as FTMSDeviceService
+    participant HRM as HeartRateMonitorService
     participant DSS as DeviceStorageService
 
     DP->>FBP: startScan(timeout: 10s)
@@ -82,8 +98,15 @@ sequenceDiagram
                 alt FTMS detected
                     FTMS-->>DP: FTMSDevice(type: bike/treadmill)
                     DP->>DSS: saveDevice(device)
-                else Not supported
-                    DP->>DP: Add to skip cache
+                else Not FTMS
+                    DP->>HRM: detectDevice(bleDevice)
+                    Note over HRM: Query HR service 0x180D<br/>Check for 0x2A37
+                    alt HR Monitor detected
+                        HRM-->>DP: FTMSDevice(type: heartRateMonitor)
+                        DP->>DSS: saveDevice(device)
+                    else Not supported
+                        DP->>DP: Add to skip cache
+                    end
                 end
             end
         end
@@ -273,6 +296,70 @@ Auto-incline based on route grade:
 
 ---
 
+## Heart Rate Monitor Protocol
+
+Free Ride supports standalone BLE heart rate monitors (chest straps, watches, arm bands) using the standard GATT Heart Rate Service.
+
+### Service & Characteristics
+
+| UUID | Name | Direction |
+|------|------|-----------|
+| `0x180D` | Heart Rate Service | — |
+| `0x2A37` | Heart Rate Measurement | Device → App (Notify) |
+| `0x2A38` | Body Sensor Location | Device → App (Read, optional) |
+
+### Heart Rate Measurement Packet (0x2A37)
+
+| Byte | Field | Description |
+|------|-------|-------------|
+| 0 | Flags | Bit 0: HR format (0 = UINT8, 1 = UINT16) |
+| 1 (or 1–2) | Heart Rate | BPM value |
+| ... | Optional | Sensor contact, energy, RR-intervals |
+
+### Heart Rate Priority
+
+During a ride, heart rate data is sourced with the following priority:
+
+```mermaid
+flowchart LR
+    HRM[HR Monitor<br/>BLE 0x180D] -->|Highest| HR[Current HR]
+    DEV[Exercise Device<br/>FTMS HR field] -->|Medium| HR
+    SIM[HeartRateSimulator<br/>Virtual only] -->|Lowest| HR
+```
+
+1. **HR Monitor (HRM)** — Standalone BLE heart rate monitor, if connected and reporting > 0
+2. **Exercise Device** — HR field from FTMS Indoor Bike/Treadmill data packets
+3. **Simulated** — HeartRateSimulator in virtual devices
+
+The simulation screen shows the active source as a label: `(HRM)`, `(Device)`, or no label for simulated.
+
+### Connection Lifecycle
+
+```mermaid
+sequenceDiagram
+    participant App
+    participant HRM as HR Monitor
+
+    App->>HRM: connect()
+    HRM-->>App: Connected
+    App->>HRM: discoverServices()
+    HRM-->>App: Service list (0x180D)
+    App->>HRM: Subscribe to 0x2A37 notifications
+
+    loop During ride
+        HRM-->>App: HR Measurement notification
+        App->>App: parseHeartRate(data)
+    end
+
+    alt Device disconnects
+        HRM-->>App: Disconnect event
+        App->>App: attemptReconnect (2s backoff)
+        App->>HRM: connect()
+    end
+```
+
+---
+
 ## Auto-Reconnect
 
 When a real BLE device disconnects during a ride:
@@ -290,7 +377,7 @@ flowchart TD
     RESUB --> RESUME[Resume Ride]
 ```
 
-- Applies to both FTMS and Echelon devices
+- Applies to FTMS, Echelon, and Heart Rate Monitor devices
 - 2-second backoff between attempts
 - Ride remains paused during reconnection
 - UI displays a yellow "Reconnecting..." banner

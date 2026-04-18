@@ -94,6 +94,7 @@ classDiagram
         <<enumeration>>
         indoorBike
         treadmill
+        heartRateMonitor
     }
 
     class UserProfile {
@@ -320,7 +321,7 @@ Persisted device descriptor for both real BLE and virtual devices.
 |-------|------|-------------|
 | `id` | String | UUID identifier |
 | `name` | String | Display name |
-| `deviceType` | DeviceType | `indoorBike` or `treadmill` |
+| `deviceType` | DeviceType | `indoorBike`, `treadmill`, or `heartRateMonitor` |
 | `isVirtual` | bool | True for simulated devices |
 | `deviceAddress` | String? | BLE MAC address (null for virtual) |
 | `lastConnected` | DateTime | Last connection timestamp |
@@ -344,6 +345,7 @@ Persisted device descriptor for both real BLE and virtual devices.
 enum DeviceType {
   indoorBike,
   treadmill,
+  heartRateMonitor,
 }
 ```
 

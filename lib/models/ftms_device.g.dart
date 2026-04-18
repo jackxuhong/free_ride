@@ -72,6 +72,8 @@ class DeviceTypeAdapter extends TypeAdapter<DeviceType> {
         return DeviceType.indoorBike;
       case 1:
         return DeviceType.treadmill;
+      case 2:
+        return DeviceType.heartRateMonitor;
       default:
         return DeviceType.indoorBike;
     }
@@ -85,6 +87,9 @@ class DeviceTypeAdapter extends TypeAdapter<DeviceType> {
         break;
       case DeviceType.treadmill:
         writer.writeByte(1);
+        break;
+      case DeviceType.heartRateMonitor:
+        writer.writeByte(2);
         break;
     }
   }

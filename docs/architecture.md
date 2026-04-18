@@ -32,6 +32,7 @@ graph TB
             VT[VirtualTreadmill]
             FTMS[FTMSDeviceService]
             ECH[EchelonDevice]
+            HRMS[HeartRateMonitorService]
         end
         subgraph Physics["Physics & Simulation"]
             RC[RideCalculator]
@@ -217,8 +218,11 @@ graph TD
     DP --> DSS[DeviceStorageService]
     DP --> FTMS[FTMSDeviceService]
     DP --> ECH[EchelonDevice]
+    DP --> HRMS[HeartRateMonitorService]
     DP --> VB[VirtualIndoorBike]
     DP --> VT[VirtualTreadmill]
+
+    RIP --> HRMS
 
     VB --> HRS[HeartRateSimulator]
     VT --> HRS

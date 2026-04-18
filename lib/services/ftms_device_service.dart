@@ -300,7 +300,7 @@ class FTMSDevice implements FitnessDevice {
       return true;
     } catch (e) {
       developer.log('Error connecting to device: $e', name: 'FTMSService', level: 1000, error: e);
-      await disconnect();
+      await disconnect(preserveReconnectState: _isReconnecting);
       
       // Trigger auto-reconnect for initial connection failures
       if (!_isReconnecting) {
@@ -311,9 +311,14 @@ class FTMSDevice implements FitnessDevice {
     }
   }
 
-  /// Disconnect from device
-  Future<void> disconnect() async {
-    _isReconnecting = false; // Stop any reconnection attempts
+  /// Disconnect from device.
+  ///
+  /// When [preserveReconnectState] is `true` the reconnect flag is left
+  /// untouched so that a retry loop in [_attemptReconnect] can continue.
+  Future<void> disconnect({bool preserveReconnectState = false}) async {
+    if (!preserveReconnectState) {
+      _isReconnecting = false; // Stop any reconnection attempts
+    }
     _isConnected = false;
     _connectionStateController.add(false);
     await _connectionStateSubscription?.cancel();
@@ -324,25 +329,47 @@ class FTMSDevice implements FitnessDevice {
     _connectedDevice = null;
   }
   
-  /// Attempt to reconnect to device
+  /// Attempt to reconnect to device with exponential backoff.
+  ///
+  /// Retries up to [_maxReconnectAttempts] times with increasing delays
+  /// (2s, 4s, 8s, 16s, 16s). Stops immediately if [_isReconnecting] is
+  /// set to `false` externally (e.g. by [disconnect] or [dispose]).
   Future<void> _attemptReconnect() async {
     if (_isReconnecting) return;
     _isReconnecting = true;
-    
-    // Wait a bit before reconnecting
-    await Future.delayed(const Duration(seconds: 2));
-    
-    if (!_isReconnecting) return; // Cancelled during wait
-    
-    final success = await connect();
-    if (success) {
-      developer.log('Successfully reconnected to FTMS device', name: 'FTMSService', level: 800);
-      _isReconnecting = false;
-    } else {
-      developer.log('Reconnection failed, will retry...', name: 'FTMSService', level: 900);
-      _isReconnecting = false;
-      // Will trigger again via connection state listener
+
+    const maxAttempts = 5;
+    var delay = const Duration(seconds: 2);
+
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      await Future.delayed(delay);
+      if (!_isReconnecting) return; // cancelled during wait
+
+      developer.log(
+        'Reconnect attempt $attempt/$maxAttempts...',
+        name: 'FTMSService',
+        level: 800,
+      );
+
+      final success = await connect();
+      if (success) {
+        developer.log('Successfully reconnected to FTMS device', name: 'FTMSService', level: 800);
+        _isReconnecting = false;
+        return;
+      }
+
+      if (!_isReconnecting) return; // cancelled by disconnect() inside connect()
+
+      // Exponential backoff, capped at 16 seconds
+      delay = Duration(seconds: (delay.inSeconds * 2).clamp(2, 16));
     }
+
+    developer.log(
+      'FTMS reconnection failed after $maxAttempts attempts',
+      name: 'FTMSService',
+      level: 1000,
+    );
+    _isReconnecting = false;
   }
 
   @override

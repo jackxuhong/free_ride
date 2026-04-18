@@ -11,6 +11,7 @@ import 'package:free_ride/services/virtual_treadmill.dart';
 import 'package:free_ride/services/ftms_device_service.dart' as ftms;
 import 'package:free_ride/services/echelon_device.dart';
 import 'package:free_ride/services/fitness_device.dart';
+import 'package:free_ride/services/heart_rate_monitor_service.dart';
 
 class DeviceProvider extends ChangeNotifier {
     /// Local cache of discovered/tested device addresses
@@ -22,7 +23,7 @@ class DeviceProvider extends ChangeNotifier {
   static final List<Future<model.FTMSDevice?> Function(BluetoothDevice)> _detectors = [
     EchelonDevice.detectDevice, // Check Echelon first (quick name check)
     ftms.FTMSDevice.detectDevice,
-    // Future device services can be registered here
+    HeartRateMonitorService.detectDevice,
   ];
 
   model.FTMSDevice? _selectedDevice;
@@ -30,16 +31,23 @@ class DeviceProvider extends ChangeNotifier {
   bool _isScanning = false;
   List<model.FTMSDevice> _availableDevices = [];
 
+  // HR monitor (independent of exercise device)
+  model.FTMSDevice? _selectedHRMonitor;
+  HeartRateMonitorService? _activeHRMonitor;
+
   model.FTMSDevice? get selectedDevice => _selectedDevice;
   FitnessDevice? get activeDevice => _activeDevice;
   bool get isScanning => _isScanning;
   List<model.FTMSDevice> get availableDevices => _availableDevices;
   bool get hasDeviceSelected => _selectedDevice != null;
+  model.FTMSDevice? get selectedHRMonitor => _selectedHRMonitor;
+  HeartRateMonitorService? get activeHRMonitor => _activeHRMonitor;
 
   /// Initialize provider and load last used device
   Future<void> init() async {
     await _loadDevices();
     await _loadLastUsedDevice();
+    await _loadLastUsedHRMonitor();
   }
 
   /// Load all saved devices
@@ -51,13 +59,29 @@ class DeviceProvider extends ChangeNotifier {
   /// Load and auto-select last used device
   Future<void> _loadLastUsedDevice() async {
     final lastUsed = _storage.getLastUsedDevice();
-    if (lastUsed != null) {
+    if (lastUsed != null && lastUsed.deviceType != model.DeviceType.heartRateMonitor) {
       await selectDevice(lastUsed);
+    }
+  }
+
+  /// Load and auto-select last used HR monitor
+  Future<void> _loadLastUsedHRMonitor() async {
+    final lastUsed = _storage.getLastUsedHRMonitor();
+    if (lastUsed != null) {
+      _selectedHRMonitor = lastUsed;
+      _activeHRMonitor = HeartRateMonitorService(lastUsed);
+      notifyListeners();
     }
   }
 
   /// Select a device
   Future<void> selectDevice(model.FTMSDevice device) async {
+    // HR monitors are selected separately
+    if (device.deviceType == model.DeviceType.heartRateMonitor) {
+      await selectHRMonitor(device);
+      return;
+    }
+
     // Dispose old active device if it exists
     if (_activeDevice != null && _selectedDevice?.id != device.id) {
       _activeDevice?.dispose();
@@ -72,6 +96,31 @@ class DeviceProvider extends ChangeNotifier {
       _activeDevice = _createActiveDevice(device);
     }
 
+    notifyListeners();
+  }
+
+  /// Select a heart rate monitor
+  Future<void> selectHRMonitor(model.FTMSDevice device) async {
+    if (device.deviceType != model.DeviceType.heartRateMonitor) return;
+
+    // Dispose old HR monitor if changing
+    if (_activeHRMonitor != null && _selectedHRMonitor?.id != device.id) {
+      _activeHRMonitor?.dispose();
+      _activeHRMonitor = null;
+    }
+
+    _selectedHRMonitor = device;
+    _activeHRMonitor = HeartRateMonitorService(device);
+    await _storage.setLastUsedHRMonitorId(device.id);
+    notifyListeners();
+  }
+
+  /// Deselect the current HR monitor
+  Future<void> deselectHRMonitor() async {
+    _activeHRMonitor?.dispose();
+    _activeHRMonitor = null;
+    _selectedHRMonitor = null;
+    await _storage.setLastUsedHRMonitorId(null);
     notifyListeners();
   }
 
@@ -115,6 +164,14 @@ class DeviceProvider extends ChangeNotifier {
       _activeDevice?.dispose();
       _activeDevice = null;
       _selectedDevice = null;
+    }
+
+    // Clear HR monitor selection if removing the selected HR monitor
+    if (_selectedHRMonitor?.id == deviceId) {
+      _activeHRMonitor?.dispose();
+      _activeHRMonitor = null;
+      _selectedHRMonitor = null;
+      await _storage.setLastUsedHRMonitorId(null);
     }
     
     await _storage.deleteDevice(deviceId);
@@ -354,6 +411,13 @@ class DeviceProvider extends ChangeNotifier {
       _activeDevice?.dispose();
       _activeDevice = null;
     }
+
+    // Clear HR monitor selection if deleting the selected HR monitor
+    if (_selectedHRMonitor?.id == deviceId) {
+      _activeHRMonitor?.dispose();
+      _activeHRMonitor = null;
+      _selectedHRMonitor = null;
+    }
     
     await _loadDevices();
   }
@@ -373,6 +437,7 @@ class DeviceProvider extends ChangeNotifier {
   @override
   void dispose() {
     _activeDevice?.dispose();
+    _activeHRMonitor?.dispose();
     super.dispose();
   }
 }

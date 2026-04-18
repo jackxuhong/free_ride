@@ -140,6 +140,7 @@ graph TD
 - **Connection banner**: Yellow "Reconnecting..." banner when a real device disconnects.
 - **Auto-completion**: Navigates to SummaryScreen when ride reaches 100% or `completeRide()` is called.
 - **Guard**: `_hasNavigatedToSummary` flag prevents duplicate navigation.
+- **HR source label**: The heart rate metric card shows the data source — `(HRM)` for a standalone HR monitor, `(Device)` for exercise device HR, or no label for simulated HR.
 
 ---
 
@@ -224,18 +225,27 @@ Device management screen for listing, selecting, and configuring fitness devices
 ```mermaid
 graph TD
     subgraph DeviceSetupScreen
-        LIST[Device List]
+        ES[Exercise Devices Section]
+        HRS[Heart Rate Monitors Section]
         SCAN[Scan for Devices Button]
         CACHE[Clear Cache Button]
     end
 
-    subgraph DeviceCard[Per-Device Card]
+    subgraph DeviceCard[Exercise Device Card]
         ICON[Type Icon<br/>Bike / Treadmill]
         NAME[Device Name]
         BADGE[Virtual Badge]
         STATUS[Connection Status]
         SELECT[Select Button]
         DELETE[Delete Button]
+    end
+
+    subgraph HRCard[HR Monitor Card]
+        HRICON[Heart Icon]
+        HRNAME[Monitor Name]
+        HRSTATUS[Connection Status]
+        HRSELECT[Toggle Select]
+        HRDELETE[Delete Button]
     end
 
     subgraph VirtualControls[Virtual Device Controls]
@@ -254,10 +264,12 @@ graph TD
 
 | Feature | Description |
 |---------|-------------|
-| **Device List** | Shows all saved devices (virtual + real) |
+| **Exercise Devices** | Listed under "Exercise Devices" section header |
+| **HR Monitors** | Listed under "Heart Rate Monitors" section header with heart icon |
 | **Select Device** | Highlight active device; creates FitnessDevice instance |
+| **Select HR Monitor** | Toggle-select HR monitor; can coexist with selected exercise device |
 | **Virtual Controls** | Speed slider for virtual devices |
-| **Scan** | 10-second BLE scan with progress dialog |
+| **Scan** | 10-second BLE scan with progress dialog; finds exercise devices and HR monitors |
 | **Clear Cache** | Force re-detection of all BLE devices on next scan |
 | **Delete** | Remove real devices only (virtual devices are permanent) |
 

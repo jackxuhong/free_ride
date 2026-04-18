@@ -106,8 +106,10 @@ Manages BLE device scanning, detection, selection, and lifecycle. Maintains both
 |-------|------|-------------|
 | `_selectedDevice` | FTMSDevice? | Persisted device model descriptor |
 | `_activeDevice` | FitnessDevice? | Live device instance (virtual or BLE) |
+| `_selectedHRMonitor` | FTMSDevice? | Selected HR monitor model |
+| `_activeHRMonitor` | HeartRateMonitorService? | Live HR monitor instance |
 | `_isScanning` | bool | Whether a BLE scan is active |
-| `_availableDevices` | List\<FTMSDevice\> | All saved devices |
+| `_availableDevices` | List\<FTMSDevice\> | All saved devices (exercise + HR monitors) |
 | `_deviceCache` | Set\<String\> | BLE addresses already tested (skip on rescan) |
 
 ### Device Detection Pipeline
@@ -121,9 +123,12 @@ flowchart TD
     D -->|Match| E[Save Echelon Device]
     D -->|No match| F[Try FTMS Detector]
     F -->|Match| G[Save FTMS Device]
-    F -->|No match| H[Add to skip cache]
+    F -->|No match| I[Try HR Monitor Detector]
+    I -->|Match| J[Save HR Monitor Device]
+    I -->|No match| H[Add to skip cache]
     E --> B
     G --> B
+    J --> B
     H --> B
 ```
 
@@ -144,9 +149,11 @@ flowchart TD
 
 | Method | Purpose |
 |--------|---------|
-| `init()` | Load saved devices + last used device from storage |
-| `selectDevice(device)` | Set active device, create FitnessDevice instance |
-| `startScan()` | 10-sec BLE scan; test each with detectors; save new devices |
+| `init()` | Load saved devices + last used device + last used HR monitor |
+| `selectDevice(device)` | Set active device, create FitnessDevice instance (routes HR monitors to `selectHRMonitor`) |
+| `selectHRMonitor(device)` | Set active HR monitor, create HeartRateMonitorService instance |
+| `deselectHRMonitor()` | Disconnect and clear active HR monitor |
+| `startScan()` | 10-sec BLE scan; test each with detectors (Echelon, FTMS, HR Monitor); save new devices |
 | `stopScan()` | Stop active BLE scan |
 | `deleteDevice(id)` | Remove device from storage |
 | `updateDeviceParameters(effort, param)` | Update effort level / controllable parameter |
@@ -214,6 +221,7 @@ stateDiagram-v2
 | `_powerSamples` | List\<PowerSample\> | Timestamped power readings |
 | `_currentCadence` | double | Current cadence/pace |
 | `_currentHeartRate` | int | Current HR (bpm) |
+| `_hrMonitor` | HeartRateMonitorService? | Optional standalone HR monitor |
 | `_caloriesBurned` | double | Running calorie total |
 | `_workoutIntensity` | double | 0.5–2.0 multiplier |
 
@@ -242,7 +250,7 @@ flowchart TD
 | Method | Purpose |
 |--------|---------|
 | `initializeRide(route, thumbnail?)` | Setup ride state without device |
-| `startRideWithDevice(route, device, thumbnail?)` | Full setup: connect device + start |
+| `startRideWithDevice(route, device, thumbnail?, hrMonitor?)` | Full setup: connect device + optional HR monitor + start |
 | `startRide()` | Begin simulation loop |
 | `pauseRide()` | Pause timer and metrics |
 | `resumeRide()` | Resume from pause |
@@ -261,13 +269,14 @@ On each 100ms tick:
 5. **Power** — from device data or estimated via RideCalculator
 6. **Calories** — accumulated via RideCalculator.estimateCalories
 7. **Heart Rate** — from device data
-8. **Cadence/Pace** — from device data
+7. **Heart Rate** — from HR monitor (highest priority), device data, or simulated
 
 ### Provider Communication
 
 ```mermaid
 graph LR
     DP[DeviceProvider] -->|activeDevice| RIP[RideProvider]
+    DP -->|activeHRMonitor| RIP
     RP[RouteProvider] -->|currentRoute| RIP
     RIP -->|notifyListeners| SS[SimulationScreen]
     RIP -->|rideSummary| RSS[RouteStorageService]

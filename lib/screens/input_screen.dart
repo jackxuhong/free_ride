@@ -391,6 +391,7 @@ class _InputScreenState extends State<InputScreen> {
         routeProvider.currentRoute!,
         deviceProvider.activeDevice!,
         thumbnail: thumbnail,
+        hrMonitor: deviceProvider.activeHRMonitor,
       );
       
       Navigator.of(context).push(

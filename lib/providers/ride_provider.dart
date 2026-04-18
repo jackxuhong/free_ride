@@ -11,6 +11,7 @@ import 'package:free_ride/services/route_storage_service.dart';
 import 'package:free_ride/services/profile_service.dart';
 import 'package:free_ride/services/virtual_device_interface.dart';
 import 'package:free_ride/services/fitness_device.dart';
+import 'package:free_ride/services/heart_rate_monitor_service.dart';
 import 'package:free_ride/utils/constants.dart';
 
 enum RideStatus { notStarted, running, paused, completed, cancelled }
@@ -19,6 +20,7 @@ class RideProvider with ChangeNotifier {
   SavedRoute? _route;
   RideStatus _status = RideStatus.notStarted;
   Timer? _simulationTimer;
+  StreamSubscription<bool>? _connectionStateSubscription;
 
   // Position and progress
   int _currentSegmentIndex = 0;
@@ -54,6 +56,7 @@ class RideProvider with ChangeNotifier {
 
   // Device tracking
   FitnessDevice? _activeDevice;
+  HeartRateMonitorService? _hrMonitor;
   double _currentCadence = 0.0;
   double _currentHeartRate = 0.0;
   List<double> _cadenceSamples = [];
@@ -90,7 +93,15 @@ class RideProvider with ChangeNotifier {
   double get currentHeartRate => _currentHeartRate;
   double get workoutIntensity => _workoutIntensity;
   FitnessDevice? get activeDevice => _activeDevice;
+  HeartRateMonitorService? get hrMonitor => _hrMonitor;
   double get currentCalories => _currentCalories;
+
+  /// Describes where the displayed heart rate comes from.
+  String get hrSource {
+    if (_hrMonitor != null && _hrMonitor!.currentHeartRate > 0) return 'HRM';
+    if (_activeDevice != null && _currentHeartRate > 0) return 'Device';
+    return '';
+  }
 
   /// Initialize ride with a route
   Future<void> initializeRide(SavedRoute route, {Uint8List? thumbnail}) async {
@@ -112,11 +123,13 @@ class RideProvider with ChangeNotifier {
 
   /// Initializes ride with a device and connects.
   ///
+  /// An optional [hrMonitor] can be provided for independent heart rate data.
   /// Returns `true` if the device connected successfully, `false` otherwise.
   Future<bool> startRideWithDevice(
     SavedRoute route,
     FitnessDevice device, {
     Uint8List? thumbnail,
+    HeartRateMonitorService? hrMonitor,
   }) async {
     _route = route;
     _status = RideStatus.notStarted;
@@ -129,6 +142,7 @@ class RideProvider with ChangeNotifier {
     
     // Set device and intensity AFTER reset
     _activeDevice = device;
+    _hrMonitor = hrMonitor;
     _workoutIntensity = 1.0;
     
     // Connect to device (real or virtual)
@@ -141,8 +155,18 @@ class RideProvider with ChangeNotifier {
       );
       return false;
     }
+
+    // Connect HR monitor if provided (non-blocking)
+    if (_hrMonitor != null) {
+      _hrMonitor!.connect().then((ok) {
+        if (!ok) {
+          developer.log('HR monitor failed to connect', name: 'RideProvider', level: 900);
+        }
+      });
+    }
     // Listen to connection state for auto-pause/resume
-    device.connectionState.listen((isConnected) {
+    await _connectionStateSubscription?.cancel();
+    _connectionStateSubscription = device.connectionState.listen((isConnected) {
       if (!isConnected && _status == RideStatus.running) {
         pauseRide();
       } else if (isConnected && _status == RideStatus.paused) {
@@ -177,6 +201,9 @@ class RideProvider with ChangeNotifier {
 
     _status = RideStatus.running;
     
+    // Cancel any existing timer to prevent duplicates
+    _simulationTimer?.cancel();
+
     // Start simulation timer
     _simulationTimer = Timer.periodic(
       AppConstants.simulationTickInterval,
@@ -198,11 +225,42 @@ class RideProvider with ChangeNotifier {
   }
 
   /// Resume the ride
-  void resumeRide() {
+  ///
+  /// If the fitness device or HR monitor disconnected while paused, this
+  /// attempts to reconnect before restarting the simulation timer.
+  Future<void> resumeRide() async {
     if (_status != RideStatus.paused) return;
 
     if (_pauseStartTime != null) {
       _pausedTime += DateTime.now().difference(_pauseStartTime!);
+    }
+
+    // Reconnect devices if they dropped while paused
+    if (_activeDevice != null && !_activeDevice!.isConnected) {
+      developer.log(
+        'Device disconnected during pause, attempting reconnect',
+        name: 'RideProvider',
+      );
+      final ok = await _activeDevice!.connect();
+      if (!ok) {
+        developer.log(
+          'Device reconnect failed on resume',
+          name: 'RideProvider',
+          level: 1000,
+        );
+      }
+    }
+
+    if (_hrMonitor != null && !_hrMonitor!.isConnected) {
+      _hrMonitor!.connect().then((ok) {
+        if (!ok) {
+          developer.log(
+            'HR monitor reconnect failed on resume',
+            name: 'RideProvider',
+            level: 900,
+          );
+        }
+      });
     }
 
     startRide();
@@ -223,6 +281,7 @@ class RideProvider with ChangeNotifier {
     
     // Disconnect device (real or virtual)
     await _activeDevice?.disconnect();
+    await _hrMonitor?.disconnect();
 
     final summary = await _generateSummary(completed: false, cancellationReason: 'user_cancelled');
     
@@ -321,6 +380,7 @@ class RideProvider with ChangeNotifier {
 
     // Disconnect device so the next ride can reconnect cleanly
     await _activeDevice?.disconnect();
+    await _hrMonitor?.disconnect();
     
     // Auto-save completed ride to history
     await _autoSaveRide(summary);
@@ -371,7 +431,12 @@ class RideProvider with ChangeNotifier {
         _currentCadence = deviceData.cadenceOrPace!;
         _cadenceSamples.add(_currentCadence);
       }
-      if (deviceData.heartRate != null) {
+
+      // Heart rate: prefer HR monitor, fall back to device HR
+      if (_hrMonitor != null && _hrMonitor!.currentHeartRate > 0) {
+        _currentHeartRate = _hrMonitor!.currentHeartRate.toDouble();
+        _heartRateSamples.add(_currentHeartRate);
+      } else if (deviceData.heartRate != null) {
         _currentHeartRate = deviceData.heartRate!.toDouble();
         _heartRateSamples.add(_currentHeartRate);
       }
@@ -632,8 +697,12 @@ class RideProvider with ChangeNotifier {
     _cadenceSamples = [];
     _heartRateSamples = [];
     _workoutIntensity = 1.0;
+    await _connectionStateSubscription?.cancel();
+    _connectionStateSubscription = null;
     await _activeDevice?.disconnect();
     _activeDevice = null;
+    await _hrMonitor?.disconnect();
+    _hrMonitor = null;
     _currentCalories = 0.0;
     _totalElevationGained = 0.0;
   }
@@ -641,6 +710,7 @@ class RideProvider with ChangeNotifier {
   @override
   void dispose() {
     _simulationTimer?.cancel();
+    _connectionStateSubscription?.cancel();
     super.dispose();
   }
 }

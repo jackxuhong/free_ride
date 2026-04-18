@@ -73,4 +73,7 @@ enum DeviceType {
 
   @HiveField(1)
   treadmill,
+
+  @HiveField(2)
+  heartRateMonitor,
 }

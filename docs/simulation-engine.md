@@ -146,7 +146,25 @@ Base MET is determined by average speed:
 
 Elevation bonus adds additional MET based on meters climbed per kilometer.
 
-## Heart Rate Simulation
+## Heart Rate
+
+### Data Source Priority
+
+During a ride, heart rate data comes from one of three sources, selected by priority:
+
+```mermaid
+flowchart TD
+    TICK[Simulation Tick] --> HRM{HR Monitor<br/>connected & HR > 0?}
+    HRM -->|Yes| USE_HRM[Use HR Monitor value]
+    HRM -->|No| DEV{Exercise device<br/>reports HR?}
+    DEV -->|Yes| USE_DEV[Use device HR]
+    DEV -->|No| SIM[Use simulated HR<br/>virtual devices only]
+    USE_HRM --> STORE[Store in _currentHeartRate]
+    USE_DEV --> STORE
+    SIM --> STORE
+```
+
+### Simulation (Virtual Devices)
 
 For virtual devices, heart rate follows an exponential approach model:
 
