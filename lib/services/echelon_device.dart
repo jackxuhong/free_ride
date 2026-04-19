@@ -216,13 +216,13 @@ class EchelonDevice implements FitnessDevice {
       return true;
     } catch (e) {
       developer.log('Failed to connect to Echelon device: $e');
-      await disconnect();
+      await disconnect(preserveReconnectState: _isReconnecting);
       return false;
     }
   }
   
   @override
-  Future<void> disconnect() async {
+  Future<void> disconnect({bool preserveReconnectState = false}) async {
     try {
       developer.log('Disconnecting from Echelon device');
       
@@ -241,7 +241,9 @@ class EchelonDevice implements FitnessDevice {
       }
       
       _isConnected = false;
-      _isReconnecting = false;
+      if (!preserveReconnectState) {
+        _isReconnecting = false;
+      }
       if (!_connectionStateController.isClosed) {
         _connectionStateController.add(false);
       }
@@ -253,24 +255,43 @@ class EchelonDevice implements FitnessDevice {
   }
 
   /// Attempts to reconnect to the Echelon device after a disconnect.
+  ///
+  /// Retries up to 5 times with exponential backoff (2s, 4s, 8s, 16s, 16s).
+  /// Stops immediately if [_isReconnecting] is set to `false` externally.
   Future<void> _attemptReconnect() async {
     if (_isReconnecting) return;
     _isReconnecting = true;
 
-    // Wait before reconnecting
-    await Future.delayed(const Duration(seconds: 2));
+    const maxAttempts = 5;
+    var delay = const Duration(seconds: 2);
 
-    if (!_isReconnecting) return; // Cancelled during wait
+    for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+      await Future.delayed(delay);
+      if (!_isReconnecting) return;
 
-    final success = await connect();
-    if (success) {
-      developer.log('Successfully reconnected to Echelon device');
-      _isReconnecting = false;
-    } else {
-      developer.log('Echelon reconnection failed, will retry...');
-      _isReconnecting = false;
-      // Will trigger again via connection state listener
+      developer.log(
+        'Echelon reconnect attempt $attempt/$maxAttempts...',
+        name: 'EchelonDevice',
+      );
+
+      final success = await connect();
+      if (success) {
+        developer.log('Successfully reconnected to Echelon device');
+        _isReconnecting = false;
+        return;
+      }
+
+      if (!_isReconnecting) return;
+
+      delay = Duration(seconds: (delay.inSeconds * 2).clamp(2, 16));
     }
+
+    developer.log(
+      'Echelon reconnection failed after $maxAttempts attempts',
+      name: 'EchelonDevice',
+      level: 1000,
+    );
+    _isReconnecting = false;
   }
   
   /// Sends initialization sequence to Echelon bike

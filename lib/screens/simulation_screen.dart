@@ -190,7 +190,7 @@ class _SimulationScreenState extends State<SimulationScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) async {
         if (mounted) {
           final summary = await rideProvider.completeRide();
-          if (mounted) {
+          if (context.mounted) {
             Navigator.of(context).pushReplacement(
               MaterialPageRoute(
                 builder: (context) => SummaryScreen(summary: summary),
@@ -460,10 +460,12 @@ class _SimulationScreenState extends State<SimulationScreen> {
                           color: Colors.orange,
                         ),
                       ),
-                      if (rideProvider.activeDevice != null)
+                      if (rideProvider.activeDevice != null || rideProvider.hrMonitor != null)
                         Expanded(
                           child: _MetricCard(
-                            label: 'Heart Rate',
+                            label: rideProvider.hrSource.isNotEmpty
+                                ? 'Heart Rate (${rideProvider.hrSource})'
+                                : 'Heart Rate',
                             value: rideProvider.currentHeartRate > 0
                                 ? '${rideProvider.currentHeartRate.toStringAsFixed(0)} bpm'
                                 : '- bpm',

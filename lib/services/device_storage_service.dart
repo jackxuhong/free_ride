@@ -9,6 +9,7 @@ class DeviceStorageService {
 
   static const String _boxName = 'ftms_devices';
   static const String _lastUsedKey = 'last_used_device_id';
+  static const String _lastUsedHRMonitorKey = 'last_used_hr_monitor_id';
   
   late Box<FTMSDevice> _devicesBox;
   late Box<dynamic> _settingsBox;
@@ -138,5 +139,26 @@ class DeviceStorageService {
 
     final updated = device.copyWith(lastConnected: DateTime.now());
     await saveDevice(updated);
+  }
+
+  /// Get last used HR monitor device ID
+  String? getLastUsedHRMonitorId() {
+    return _settingsBox.get(_lastUsedHRMonitorKey);
+  }
+
+  /// Set last used HR monitor device ID
+  Future<void> setLastUsedHRMonitorId(String? deviceId) async {
+    if (deviceId == null) {
+      await _settingsBox.delete(_lastUsedHRMonitorKey);
+    } else {
+      await _settingsBox.put(_lastUsedHRMonitorKey, deviceId);
+    }
+  }
+
+  /// Get last used HR monitor device
+  FTMSDevice? getLastUsedHRMonitor() {
+    final id = getLastUsedHRMonitorId();
+    if (id == null) return null;
+    return getDevice(id);
   }
 }
